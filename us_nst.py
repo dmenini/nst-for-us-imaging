@@ -12,6 +12,12 @@ from img_lib import *
 mpl.rcParams['figure.figsize'] = (12, 12)
 mpl.rcParams['axes.grid'] = False
 
+style_weight = 1e-2
+content_weight = 1e4
+total_variation_weight = 30
+epochs = 100
+steps_per_epoch = 50
+
 
 def quick_nst(content_image, style_image):
 
@@ -70,14 +76,13 @@ def long_nst(content_image, style_image, reg=True):
     # The paper recommends LBFGS, but Adam works okay too
     opt = tf.optimizers.Adam(learning_rate=0.02, beta_1=0.99, epsilon=1e-1)
 
-    def style_content_loss(outputs, style_weight=1e-2, content_weight=1e4):
+    def style_content_loss(outputs):
         """Weighted combination of style and content loss"""
         style_outputs = outputs['style']
         content_outputs = outputs['content']
         style_loss = tf.add_n([tf.reduce_mean((style_outputs[name] - style_targets[name]) ** 2)
                                for name in style_outputs.keys()])
         style_loss *= style_weight / num_style_layers
-
         content_loss = tf.add_n([tf.reduce_mean((content_outputs[name] - content_targets[name]) ** 2)
                                  for name in content_outputs.keys()])
         content_loss *= content_weight / num_content_layers
@@ -86,21 +91,16 @@ def long_nst(content_image, style_image, reg=True):
 
     @tf.function()
     def train_step(image):
-        total_variation_weight = 30
         with tf.GradientTape() as tape:
             outputs = extractor(image)
             loss = style_content_loss(outputs)
             if reg:
                 loss += total_variation_weight * total_variation_loss(image)  # tf.image.total_variation(image)
-
         grad = tape.gradient(loss, image)
         opt.apply_gradients([(grad, image)])
         image.assign(clip_0_1(image))
 
     start = time.time()
-
-    epochs = 10
-    steps_per_epoch = 50
 
     step = 0
     for n in range(epochs):
@@ -123,18 +123,17 @@ def long_nst(content_image, style_image, reg=True):
 
 def main():
 
-    content = 'segmentation'
-    for i in range(8,10):
+    content = 'LQ'
+    for i in range(1, 100):
         image_path = 'img/data/new_att_all/' + str(i) + '.png'
         content_image, style_image = image_preprocessing(image_path, content=content)
-        z = np.array_equal(content_image[0,:,:,0],content_image[0, :, :, 1])
-        print(z)
+
         plt.subplot(1, 3, 1)
         imgshow(content_image, title='Content Image (' + str(content) + ')')
         plt.subplot(1, 3, 2)
         imgshow(style_image, title='Style Image (HQ)')
 
-        #stylized_image = quick_nst(content_image, style_image)
+        # stylized_image = quick_nst(content_image, style_image)
         stylized_image = long_nst(content_image, style_image)
 
         plt.subplot(1, 3, 3)
