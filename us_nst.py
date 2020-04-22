@@ -13,9 +13,9 @@ mpl.rcParams['figure.figsize'] = (12, 12)
 mpl.rcParams['axes.grid'] = False
 
 style_weight = 1e-2
-content_weight = 1e4
+content_weight = 1e-1
 total_variation_weight = 30
-epochs = 100
+epochs = 25
 steps_per_epoch = 50
 
 
@@ -48,19 +48,12 @@ def long_nst(content_image, style_image, reg=True):
     num_content_layers = len(content_layers)
     num_style_layers = len(style_layers)
 
-    # Create a model (input = vgg's input, outputs = vgg's intermediate style outputs)
-    style_extractor = vgg_layers(style_layers)
-    style_outputs = style_extractor(style_image * 255)
-
     # ==================================================================================================================
     # Create a model that extracts both content and style
     # ==================================================================================================================
 
     # This model returns a dict of the gram matrix (style) of the style_layers and content of the content_layers
     extractor = StyleContentModel(style_layers, content_layers)
-    results = extractor(tf.constant(content_image))
-
-    style_results = results['style']
 
     # ==================================================================================================================
     # Run gradient descent (with regularization term in the loss function)
@@ -72,8 +65,8 @@ def long_nst(content_image, style_image, reg=True):
 
     # Define a tf.Variable to contain the image to optimize
     stylized_image = tf.Variable(content_image)
+    best_image = tf.Variable(content_image)
 
-    # The paper recommends LBFGS, but Adam works okay too
     opt = tf.optimizers.Adam(learning_rate=0.02, beta_1=0.99, epsilon=1e-1)
 
     def style_content_loss(outputs):
@@ -101,6 +94,7 @@ def long_nst(content_image, style_image, reg=True):
         image.assign(clip_0_1(image))
 
     start = time.time()
+    error_min = 10000
 
     step = 0
     for n in range(epochs):
@@ -109,42 +103,46 @@ def long_nst(content_image, style_image, reg=True):
             step += 1
             train_step(stylized_image)
             print(".", end='')
-        #tensor_to_image(stylized_image)
-        #imgshow(stylized_image, 'Stylized Image')
+        # tensor_to_image(stylized_image)
+        # imgshow(stylized_image, 'Stylized Image')
+        error = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        print("\tMSE = ", error)
         file_name = 'img/opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
-        print("Train step: {}".format(step))
+        if error < error_min:
+            error_min = error
+            best_image = stylized_image
 
     end = time.time()
     print("Total time: {:.1f}".format(end - start))
 
-    return stylized_image
+    return best_image
 
 
 def main():
 
-    content = 'LQ'
+    content = 'seg'
     for i in range(1, 100):
         image_path = 'img/data/new_att_all/' + str(i) + '.png'
         content_image, style_image = image_preprocessing(image_path, content=content)
 
-        plt.subplot(1, 3, 1)
-        imgshow(content_image, title='Content Image (' + str(content) + ')')
-        plt.subplot(1, 3, 2)
-        imgshow(style_image, title='Style Image (HQ)')
+        # plt.subplot(1, 3, 1)
+        # imgshow(content_image, title='Content Image (' + str(content) + ')')
+        # plt.subplot(1, 3, 2)
+        # imgshow(style_image, title='Style Image (HQ)')
 
         # stylized_image = quick_nst(content_image, style_image)
         stylized_image = long_nst(content_image, style_image)
 
-        plt.subplot(1, 3, 3)
-        imgshow(rgb2gray(stylized_image), title='Stylized Image')
+        # plt.subplot(1, 3, 3)
+        # imgshow(rgb2gray(stylized_image), title='Stylized Image')
 
-        plt.show(block=False)
-        plt.pause(2)
-        plt.close()
+        # plt.show(block=False)
+        # plt.pause(2)
+        # plt.close()
 
-        file_name = 'img/result/' + str(i) + '.png'
-        tensor_to_image(stylized_image).convert('LA').save(file_name)
+        file_name = 'img/result/' + str(content) + '_' + str(i) + '.png'
+        pil_grayscale(stylized_image).save(file_name)
 
 
 if __name__ == "__main__":
