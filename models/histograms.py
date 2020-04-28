@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 
+x = 175.262839282719
+print(int(np.round(x)))
+
+
 num = 2
 
 image_path = 'img/data/new_att_all/'+str(num)+'.png'

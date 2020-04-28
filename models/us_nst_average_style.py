@@ -1,8 +1,10 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import tensorflow as tf
 import matplotlib as mpl
+import numpy as np
+import matplotlib.pyplot as plt
 import time
-import pickle
 import argparse
 
 from nst_lib import *
@@ -54,7 +56,7 @@ def main():
             style_image = image_preprocessing(image_path, object='style', c=3)
             style_targets.append(style_processing(style_image))
 
-        print('Averaged the style over {} images'.format(len(style_targets)))
+        print('Averaged the style over {} images\n'.format(len(style_targets)))
         # style_targets is a list of dicts of 3D arrays
 
         style_target = average_style(style_targets)
@@ -77,7 +79,7 @@ def main():
 
         stylized_image, score = nst(content_image, style_image, content_target, style_target, reg=True)
 
-        file_name = args.save_dir + 'avg_' + str(j) + '_' + str(score) + '.png'
+        file_name = args.save_dir + 'avg_' + str(j) + '_' + str(int(np.round(score))) + '.png'
         pil_grayscale(stylized_image).save(file_name)
 
 
@@ -171,9 +173,6 @@ def average_style(style_targets):
             temp = temp + target[key]
         avg_style[key] = temp / n
     return avg_style
-
-
-
 
 
 if __name__ == "__main__":

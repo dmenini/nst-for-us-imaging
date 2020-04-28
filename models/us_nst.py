@@ -2,10 +2,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import tensorflow as tf
 import matplotlib as mpl
+import numpy as np
 import matplotlib.pyplot as plt
 import time
 import argparse
-from PIL import Image
 
 from nst_lib import *
 from img_lib import *
@@ -70,7 +70,7 @@ def main():
         # plt.pause(2)
         # plt.close()
 
-        file_name = args.save_dir + 'basic_' + str(i) + '_' + str(score) + '.png'
+        file_name = args.save_dir + 'basic_' + str(i) + '_' + str(int(np.round(score))) + '.png'
         pil_grayscale(stylized_image).save(file_name)
 
 
