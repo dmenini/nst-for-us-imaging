@@ -92,18 +92,20 @@ def nst(content_image, style_image, content_target, style_target, reg=True):
             step += 1
             train_step(stylized_image)
             print(".", end='')
-        error = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        print("\tMSE =", error)
+        mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        psnr_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        ssim_score = ssim(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        print("\tMSE = {} \tPSNR = {} \tSSIM = {}".format(mse_score, psnr_score, ssim_score))
         file_name = 'img/opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
-        if error < error_min:
-            error_min = error
+        if mse_score < error_min:
+            error_min = mse_score
             best_image = stylized_image
 
     end = time.time()
     print("Total time: {:.1f}".format(end - start))
 
-    return best_image
+    return best_image, mse_score
 
 
 def average_style(style_targets):
@@ -121,17 +123,12 @@ def main():
 
     if CREATE:
         style_targets = []
-        for i in range(1, 500):
+        for i in range(1, 68):
             image_path = 'img/data/new_att_all/' + str(i) + '.png'
             style_image = image_preprocessing(image_path, object='style', c=3)
             style_targets.append(style_processing(style_image))
 
         print('Averaged the style over {} images'.format(len(style_targets)))
-        # print(style_targets[0]['block1_conv1'].shape) # 1x64x64
-        # print(style_targets[0]['block2_conv1'].shape) # 1x128x128
-        # print(style_targets[0]['block3_conv1'].shape) # 1x256x256
-        # print(style_targets[0]['block4_conv1'].shape) # 1x512x512
-        # print(style_targets[0]['block5_conv1'].shape) # 1x512x512
         # style_targets is a list of dicts of 3D arrays
 
         style_target = average_style(style_targets)
@@ -145,16 +142,16 @@ def main():
         with open(filename, 'rb') as handle:
             style_target = pickle.load(handle)
 
-    for j in range(1, 10):
+    for j in [1, 18, 34]:
 
         image_path = 'img/data/new_att_all/' + str(j) + '.png'
         content_image = image_preprocessing(image_path, object='content', c=3)
         style_image = image_preprocessing(image_path, object='style', c=3)
         content_target = content_processing(content_image)
 
-        stylized_image = nst(content_image, style_image, content_target, style_target, reg=True)
+        stylized_image, score = nst(content_image, style_image, content_target, style_target, reg=True)
 
-        file_name = 'img/result/avg_' + str(j) + '.png'
+        file_name = 'img/result/avg_' + str(j) + '_' + str(score) + '.png'
         pil_grayscale(stylized_image).save(file_name)
 
 

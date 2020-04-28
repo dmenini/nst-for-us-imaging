@@ -13,10 +13,23 @@ mpl.rcParams['figure.figsize'] = (12, 12)
 mpl.rcParams['axes.grid'] = False
 
 style_weight = 1e-2
-content_weight = 1e-1
+content_weight = 1e4
 total_variation_weight = 30
 epochs = 25
 steps_per_epoch = 50
+
+# Content layer where will pull our feature maps
+content_layers = ['block5_conv2']
+
+# Style layer of interest
+style_layers = ['block1_conv1',
+                'block2_conv1',
+                'block3_conv1',
+                'block4_conv1',
+                'block5_conv1']
+
+num_content_layers = len(content_layers)
+num_style_layers = len(style_layers)
 
 
 def quick_nst(content_image, style_image):
@@ -28,25 +41,6 @@ def quick_nst(content_image, style_image):
 
 
 def long_nst(content_image, style_image, reg=True):
-
-    vgg = tf.keras.applications.VGG19(include_top=False, weights='imagenet')
-
-    # print()
-    # for layer in vgg.layers:
-    #     print(layer.name)
-
-    # Content layer where will pull our feature maps
-    content_layers = ['block5_conv2']
-
-    # Style layer of interest
-    style_layers = ['block1_conv1',
-                    'block2_conv1',
-                    'block3_conv1',
-                    'block4_conv1',
-                    'block5_conv1']
-
-    num_content_layers = len(content_layers)
-    num_style_layers = len(style_layers)
 
     # ==================================================================================================================
     # Create a model that extracts both content and style
@@ -105,26 +99,28 @@ def long_nst(content_image, style_image, reg=True):
             print(".", end='')
         # tensor_to_image(stylized_image)
         # imgshow(stylized_image, 'Stylized Image')
-        error = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        print("\tMSE = ", error)
+        mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        psnr_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        ssim_score = ssim(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        print("\tMSE = {} \tPSNR = {} \tSSIM = {}".format(mse_score, psnr_score, ssim_score))
         file_name = 'img/opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
-        if error < error_min:
-            error_min = error
+        if mse_score < error_min:
+            error_min = mse_score
             best_image = stylized_image
 
     end = time.time()
     print("Total time: {:.1f}".format(end - start))
 
-    return best_image
+    return best_image, mse_score
 
 
 def main():
 
-    content = 'seg'
-    for i in range(1, 100):
+    for i in [1, 18, 34]:
         image_path = 'img/data/new_att_all/' + str(i) + '.png'
-        content_image, style_image = image_preprocessing(image_path, content=content)
+        content_image = image_preprocessing(image_path, object='content', c=3)
+        style_image = image_preprocessing(image_path, object='style', c=3)
 
         # plt.subplot(1, 3, 1)
         # imgshow(content_image, title='Content Image (' + str(content) + ')')
@@ -132,7 +128,7 @@ def main():
         # imgshow(style_image, title='Style Image (HQ)')
 
         # stylized_image = quick_nst(content_image, style_image)
-        stylized_image = long_nst(content_image, style_image)
+        stylized_image, score = long_nst(content_image, style_image, reg=True)
 
         # plt.subplot(1, 3, 3)
         # imgshow(rgb2gray(stylized_image), title='Stylized Image')
@@ -141,7 +137,7 @@ def main():
         # plt.pause(2)
         # plt.close()
 
-        file_name = 'img/result/' + str(content) + '_' + str(i) + '.png'
+        file_name = 'img/result/seg_' + str(i) + '_' + str(score) + '.png'
         pil_grayscale(stylized_image).save(file_name)
 
 

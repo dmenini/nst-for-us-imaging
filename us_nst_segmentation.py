@@ -39,6 +39,7 @@ def nst(content_image, style_image, seg_masks, reg=True):
 
     style_features = feature_extractor(style_image, style_layers)
     content_targets = feature_extractor(content_image, content_layers)
+    extractor = StyleSegContentModel(style_layers, content_layers)
 
     resized_masks = []
     for mask in seg_masks:
@@ -50,9 +51,22 @@ def nst(content_image, style_image, seg_masks, reg=True):
             m = tf.image.resize(mask, [s[1], s[2]])     # same size as the style features
             m = tf.repeat(m, s[3], -1)                  # same channels as the style features
             resized_mask[name] = m
-        resized_masks.append(resized_mask)      # list of dicts:
+        resized_masks.append(resized_mask)      # list of dicts
 
-    extractor = StyleSegContentModel(style_layers, seg_layers, content_layers, resized_mask)
+
+    # resized_masks_content = []
+    # for mask in seg_masks:
+    #     mask = mask[:, :, :, 1]             # only a channel
+    #     mask = tf.expand_dims(mask, -1)     # redefine the tensor
+    #     resized_mask = {}
+    #     for name in content_targets.keys():
+    #         c = content_targets[name].shape
+    #         m = tf.image.resize(mask, [c[1], c[2]])     # same size as the content targets
+    #         m = tf.repeat(m, c[3], -1)                  # same channels as the content targets
+    #         resized_mask[name] = m
+    #     resized_masks_content.append(resized_mask)      # list of dicts
+
+
 
     # mask_features = [feature_extractor(mask, seg_layers) for mask in seg_masks]
 
@@ -109,14 +123,16 @@ def nst(content_image, style_image, seg_masks, reg=True):
         print("Epoch: {}".format(n))
         for m in range(steps_per_epoch):
             loss = train_step(stylized_image)
-            #print(".", end='')
-            print('Loss = ', loss)
-        error = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        print("\tMSE = ", error)
+            print(".", end='')
+            # print('Loss = ', loss)
+        mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        psnr_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        ssim_score = ssim(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        print("\tMSE = {} \tPSNR = {} \tSSIM = {}".format(mse_score, psnr_score, ssim_score))
         file_name = 'img/opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
-        if error < error_min:
-            error_min = error
+        if mse_score < error_min:
+            error_min = mse_score
             best_image = stylized_image
 
     end = time.time()
@@ -124,7 +140,7 @@ def nst(content_image, style_image, seg_masks, reg=True):
 
     best_image = np.array(pil_grayscale(best_image))
 
-    return best_image
+    return best_image, mse_score
 
 
 def concatenate_channels(image, masks):
@@ -166,7 +182,7 @@ def extract_mask(image, th):
 
 
 def main():
-    for i in range(1, 10):
+    for i in [1, 18, 34]:
         image_path = 'img/data/new_att_all/' + str(i) + '.png'
         content_image = image_preprocessing(image_path, object='content', c=3)
         style_image = image_preprocessing(image_path, object='style', c=3)
@@ -176,9 +192,9 @@ def main():
         # Masks have 3 channels, are scaled as the input, value [0,1]. Saved in a list.
         seg_masks = extract_mask(seg_image, th=0.01)
 
-        stylized_image = nst(content_image, style_image, seg_masks)
+        stylized_image, score = nst(content_image, style_image, seg_masks)
 
-        file_name = 'img/result/' + str(i) + '.png'
+        file_name = 'img/result/basic_' + str(i) + '_' + str(score) + '.png'
         pil_grayscale(stylized_image).save(file_name)
 
 

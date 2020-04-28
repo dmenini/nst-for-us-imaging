@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+from skimage.measure import compare_ssim
 from img_lib import *
 
 
@@ -31,36 +32,35 @@ class StyleContentModel(tf.keras.models.Model):
         return {'content': content_dict, 'style': style_dict}
 
 
-# class StyleSegContentModel(tf.keras.models.Model):
-#     def __init__(self, style_layers, content_layers, resized_masks):
-#         super(StyleSegContentModel, self).__init__()
-#         self.vgg = vgg_layers(style_layers + content_layers)
-#         self.style_layers = style_layers
-#         self.content_layers = content_layers
-#         self.num_style_layers = len(style_layers)
-#         self.vgg.trainable = False
-#
-#     def call(self, inputs):
-#         """Expects float input in [0,1]"""
-#         inputs = inputs * 255.0
-#         preprocessed_input = tf.keras.applications.vgg19.preprocess_input(inputs)
-#         outputs = self.vgg(preprocessed_input)
-#         style_outputs, content_outputs = (outputs[:self.num_style_layers], outputs[self.num_style_layers:])
-#
-#
-#
-#
-#         content_dict = {content_name: value
-#                         for content_name, value
-#                         in zip(self.content_layers, content_outputs)}
-#         style_dict = {style_name: value
-#                       for style_name, value
-#                       in zip(self.style_layers, style_outputs)}
-#
-#         for mask in self.resized_masks:
-#             image = tf.concat([image, mask], 3)
-#
-#         return {'content': content_dict, 'style': style_dict, 'seg': seg_dict}
+class StyleSegContentModel(tf.keras.models.Model):
+    def __init__(self, style_layers, seg_layers, content_layers):
+        super(StyleSegContentModel, self).__init__()
+        self.vgg = vgg_layers(style_layers + seg_layers + content_layers)
+        self.style_layers = style_layers
+        self.seg_layers = seg_layers
+        self.content_layers = content_layers
+        self.num_style_layers = len(style_layers)
+        self.vgg.trainable = False
+
+    def call(self, inputs):
+        """Expects float input in [0,1]"""
+        inputs = inputs * 255.0
+        preprocessed_input = tf.keras.applications.vgg19.preprocess_input(inputs)
+        outputs = self.vgg(preprocessed_input)
+        style_outputs, seg_outputs, content_outputs = (outputs[:self.num_style_layers],
+                                                       outputs[self.num_style_layers:self.num_style_layers * 2],
+                                                       outputs[2 * self.num_style_layers:])
+        content_dict = {content_name: value
+                        for content_name, value
+                        in zip(self.content_layers, content_outputs)}
+        style_dict = {style_name: value
+                      for style_name, value
+                      in zip(self.style_layers, style_outputs)}
+        seg_dict = {seg_name: value
+                    for seg_name, value
+                    in zip(self.seg_layers, seg_outputs)}
+
+        return {'content': content_dict, 'style': style_dict, 'seg': seg_dict}
 
 
 class StyleModel(tf.keras.models.Model):
@@ -141,12 +141,25 @@ def total_variation_loss(image):
 def mse(result, true):
     result = np.array(result)
     true = np.array(true)
-
     n = result.shape[0] * result.shape[1]
     mse = 0
-
     for i in range(result.shape[0]):
         for j in range(result.shape[1]):
             mse = int(mse) + (int(result[i, j]) - int(true[i, j])) ** 2
-
     return mse / n
+
+
+def psnr(result, true):
+    result = np.array(result)
+    true = np.array(true)
+    error = mse(result, true)
+    psnr = 20 * np.log10(np.max(true) / np.sqrt(error))
+    return psnr
+
+
+def ssim(result, true):
+    result = np.array(result)
+    true = np.array(true)
+    (score, diff) = compare_ssim(result, true)
+    diff = (diff * 255).astype("uint8")
+    return score, diff
