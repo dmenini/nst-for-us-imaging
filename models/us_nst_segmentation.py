@@ -170,7 +170,7 @@ def nst(content_image, style_image, seg_masks, reg=True):
 
     best_image = np.array(pil_grayscale(best_image))
 
-    return best_image, mse_score
+    return best_image, error_min
 
 
 def concatenate_channels(image, masks):

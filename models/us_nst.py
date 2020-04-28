@@ -153,7 +153,7 @@ def long_nst(content_image, style_image, reg=True):
     end = time.time()
     print("Total time: {:.1f}\n".format(end - start))
 
-    return best_image, mse_score
+    return best_image, error_min
 
 
 if __name__ == "__main__":

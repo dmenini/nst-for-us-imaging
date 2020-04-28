@@ -161,7 +161,7 @@ def nst(content_image, style_image, content_target, style_target, reg=True):
     end = time.time()
     print("Total time: {:.1f}\n".format(end - start))
 
-    return best_image, mse_score
+    return best_image, error_min
 
 
 def average_style(style_targets):
