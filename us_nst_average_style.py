@@ -93,9 +93,8 @@ def nst(content_image, style_image, content_target, style_target, reg=True):
             train_step(stylized_image)
             print(".", end='')
         mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        psnr_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        ssim_score = ssim(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        print("\tMSE = {} \tPSNR = {} \tSSIM = {}".format(mse_score, psnr_score, ssim_score))
+        psnr_score = psnr(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        print("\tMSE = {} \tPSNR = {}".format(mse_score, psnr_score))
         file_name = 'img/opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
         if mse_score < error_min:

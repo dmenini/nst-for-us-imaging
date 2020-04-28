@@ -156,10 +156,3 @@ def psnr(result, true):
     psnr = 20 * np.log10(np.max(true) / np.sqrt(error))
     return psnr
 
-
-def ssim(result, true):
-    result = np.array(result)
-    true = np.array(true)
-    (score, diff) = compare_ssim(result, true)
-    diff = (diff * 255).astype("uint8")
-    return score, diff

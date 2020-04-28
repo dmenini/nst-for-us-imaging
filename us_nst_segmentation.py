@@ -39,7 +39,7 @@ def nst(content_image, style_image, seg_masks, reg=True):
 
     style_features = feature_extractor(style_image, style_layers)
     content_targets = feature_extractor(content_image, content_layers)
-    extractor = StyleSegContentModel(style_layers, content_layers)
+    extractor = StyleSegContentModel(style_layers, seg_layers, content_layers)
 
     resized_masks = []
     for mask in seg_masks:
@@ -126,9 +126,8 @@ def nst(content_image, style_image, seg_masks, reg=True):
             print(".", end='')
             # print('Loss = ', loss)
         mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        psnr_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        ssim_score = ssim(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        print("\tMSE = {} \tPSNR = {} \tSSIM = {}".format(mse_score, psnr_score, ssim_score))
+        psnr_score = psnr(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        print("\tMSE = {} \tPSNR = {}".format(mse_score, psnr_score))
         file_name = 'img/opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
         if mse_score < error_min:
