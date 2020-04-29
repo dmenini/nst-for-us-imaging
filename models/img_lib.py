@@ -84,8 +84,6 @@ def image_preprocessing(image_path, object, c=3):
         print("Object must be either 'segmentation', 'content' or 'style'")
         return 1
 
-    # print('Image shape:', image.shape)
-
     image = scale_image(image)
 
     return image

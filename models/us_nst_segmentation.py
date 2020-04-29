@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import argparse
+from PIL import Image
 
 from nst_lib import *
 from img_lib import *
@@ -19,7 +20,7 @@ parser.add_argument('--data-dir', metavar='data_dir', type=str,
 parser.add_argument('--save-dir', metavar='save_dir', type=str,
                     default='img/result/', help='Directory containing inputs.')
 parser.add_argument('--weights', metavar='weights', type=float, nargs='+',
-                    default=[1e-2, 1e4, 30], help='Style, content and total variation weights.')
+                    default=[1e-2, 1e4, 0], help='Style, content and total variation weights.')
 parser.add_argument('--epochs', metavar='weights', type=int,
                     default=25, help='Max number of epochs.')
 parser.add_argument('--steps', metavar='steps_per_epoch', type=int,
@@ -46,7 +47,7 @@ seg_layers = style_layers
 def main():
     print(args)
 
-    for i in [1, 18, 34]:
+    for i in range(34,35):
         image_path = args.data_dir + str(i) + '.png'
         print(image_path)
         content_image = image_preprocessing(image_path, object='content', c=3)
@@ -55,10 +56,10 @@ def main():
 
         # From the segmentation image, extract a binary mask for each pixel value (a mask covers > 1% of the image)
         # Masks have 3 channels, are scaled as the input, value [0,1]. Saved in a list.
-        seg_masks = extract_mask(seg_image, th=0.01)
+        seg_masks = extract_mask(seg_image, show=True)
 
         stylized_image, score = nst(content_image, style_image, seg_masks)
-        print(int(np.round(score)))
+
         file_name = args.save_dir + 'seg' + str(i) + '_' + str(int(np.round(score))) + '.png'
         pil_grayscale(stylized_image).save(file_name)
 
@@ -69,7 +70,7 @@ def feature_extractor(inputs, layers):
     return features
 
 
-def nst(content_image, style_image, seg_masks, reg=True):
+def nst(content_image, style_image, seg_masks):
 
     style_features = feature_extractor(style_image, style_layers)
     content_targets = feature_extractor(content_image, content_layers)
@@ -86,20 +87,6 @@ def nst(content_image, style_image, seg_masks, reg=True):
             m = tf.repeat(m, s[3], -1)                  # same channels as the style features
             resized_mask[name] = m
         resized_masks.append(resized_mask)      # list of dicts
-
-    # resized_masks_content = []
-    # for mask in seg_masks:
-    #     mask = mask[:, :, :, 1]             # only a channel
-    #     mask = tf.expand_dims(mask, -1)     # redefine the tensor
-    #     resized_mask = {}
-    #     for name in content_targets.keys():
-    #         c = content_targets[name].shape
-    #         m = tf.image.resize(mask, [c[1], c[2]])     # same size as the content targets
-    #         m = tf.repeat(m, c[3], -1)                  # same channels as the content targets
-    #         resized_mask[name] = m
-    #     resized_masks_content.append(resized_mask)      # list of dicts
-
-    # mask_features = [feature_extractor(mask, seg_layers) for mask in seg_masks]
 
     # ==================================================================================================================
     # Run gradient descent (with regularization term in the loss function)
@@ -138,10 +125,8 @@ def nst(content_image, style_image, seg_masks, reg=True):
     def train_step(image):
         with tf.GradientTape() as tape:
             outputs = extractor(image)
-            # image = concatenate_channels(image, seg_masks)
             loss = style_content_loss(outputs)
-            if reg:
-                loss += total_variation_weight * total_variation_loss(image)  # tf.image.total_variation(image)
+            loss += total_variation_weight * total_variation_loss(image)  # tf.image.total_variation(image)
         grad = tape.gradient(loss, image)
         opt.apply_gradients([(grad, image)])
         image.assign(clip_0_1(image))
@@ -158,7 +143,8 @@ def nst(content_image, style_image, seg_masks, reg=True):
             # print('Loss = ', loss)
         mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
         psnr_score = psnr(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        print("\tMSE = {} \tPSNR = {}".format(mse_score, psnr_score))
+        ssim_score = tf.image.ssim(stylized_image, style_image, max_val=1.0).numpy()[0]
+        print("\tPSNR = {} \tSSIM = {}".format(psnr_score, ssim_score))
         file_name = args.save_dir + 'opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
         if mse_score < error_min:
@@ -179,21 +165,22 @@ def concatenate_channels(image, masks):
     return image
 
 
-def extract_mask(image, th):
-    image = np.array(image)
+def extract_mask(image, show=False):
+    image = np.round(np.array(image) * 255.0)
     image = np.squeeze(image)
     image = image[:, :, 0]
-    pixel_val = []
+    pixel_values = []
     masks = []
-    h, w = image.shape
 
     for i in range(image.shape[0]):
         for j in range(image.shape[1]):
-            if (image[i, j] not in pixel_val) and image[i, j] != 0:
-                pixel_val.append(image[i, j])
-    # pixel_val.sort()
+            if (image[i, j] not in pixel_values) and image[i, j] != 0:
+                pixel_values.append(image[i, j])
+    # print(sorted(pixel_values))
 
-    for value in pixel_val:
+    pixel_values = [int(value) for value in pixel_values if 70 <= value <= 240]
+
+    for value in pixel_values:
         mask = np.zeros_like(image)
         for i in range(image.shape[0]):
             for j in range(image.shape[1]):
@@ -201,13 +188,12 @@ def extract_mask(image, th):
                     mask[i, j] = 1
                 else:
                     mask[i, j] = 0
-        if np.sum(mask) > h * w * th:       # keep only masks with a decent coverage (coarse grain labels)
-            mask = np.expand_dims(mask, 0)
-            mask = np.expand_dims(mask, -1)
-            mask = np.repeat(mask, 3, -1)
-            # im = Image.fromarray(mask * 255)
-            # im.show()
-            masks.append(mask)
+        if show:
+            Image.fromarray(mask*255).show()
+        mask = np.expand_dims(mask, 0)
+        mask = np.expand_dims(mask, -1)
+        mask = np.repeat(mask, 3, -1)
+        masks.append(mask)
     return masks
 
 
