@@ -79,7 +79,7 @@ def main():
 
         stylized_image, score = nst(content_image, style_image, content_target, style_target, reg=True)
 
-        file_name = args.save_dir + 'avg_' + str(j) + '_' + str(int(np.round(score))) + '.png'
+        file_name = args.save_dir + 'avg_' + str(j) + '_' + str(int(np.round(score*1e4))) + '.png'
         pil_grayscale(stylized_image).save(file_name)
 
 
@@ -149,13 +149,13 @@ def nst(content_image, style_image, content_target, style_target, reg=True):
             step += 1
             train_step(stylized_image)
             print(".", end='')
-        mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
         psnr_score = psnr(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        print("\tMSE = {} \tPSNR = {}".format(mse_score, psnr_score))
+        ssim_score = tf.image.ssim(stylized_image, style_image, max_val=1.0).numpy()[0]
+        print("\tPSNR = {} \tSSIM = {}".format(psnr_score, ssim_score))
         file_name = args.save_dir + 'opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
-        if mse_score < error_min:
-            error_min = mse_score
+        if ssim_score < error_min:
+            error_min = ssim_score
             best_image = stylized_image
 
     end = time.time()

@@ -47,7 +47,7 @@ seg_layers = style_layers
 def main():
     print(args)
 
-    for i in range(34,35):
+    for i in [1,18,34]:
         image_path = args.data_dir + str(i) + '.png'
         print(image_path)
         content_image = image_preprocessing(image_path, object='content', c=3)
@@ -56,11 +56,11 @@ def main():
 
         # From the segmentation image, extract a binary mask for each pixel value (a mask covers > 1% of the image)
         # Masks have 3 channels, are scaled as the input, value [0,1]. Saved in a list.
-        seg_masks = extract_mask(seg_image, show=True)
+        seg_masks = extract_mask(seg_image, show=False)
 
         stylized_image, score = nst(content_image, style_image, seg_masks)
 
-        file_name = args.save_dir + 'seg' + str(i) + '_' + str(int(np.round(score))) + '.png'
+        file_name = args.save_dir + 'seg' + str(i) + '_' + str(int(np.round(score*1e4))) + '.png'
         pil_grayscale(stylized_image).save(file_name)
 
 
@@ -141,14 +141,13 @@ def nst(content_image, style_image, seg_masks):
             loss = train_step(stylized_image)
             print(".", end='')
             # print('Loss = ', loss)
-        mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
         psnr_score = psnr(pil_grayscale(stylized_image), pil_grayscale(style_image))
         ssim_score = tf.image.ssim(stylized_image, style_image, max_val=1.0).numpy()[0]
         print("\tPSNR = {} \tSSIM = {}".format(psnr_score, ssim_score))
         file_name = args.save_dir + 'opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
-        if mse_score < error_min:
-            error_min = mse_score
+        if ssim_score < error_min:
+            error_min = ssim_score
             best_image = stylized_image
 
     end = time.time()

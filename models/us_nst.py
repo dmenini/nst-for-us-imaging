@@ -139,15 +139,14 @@ def long_nst(content_image, style_image, reg=True):
             step += 1
             train_step(stylized_image)
             print(".", end='')
-        # tensor_to_image(stylized_image)
-        # imgshow(stylized_image, 'Stylized Image')
-        mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
+        # imgshow(tensor_to_image(stylized_image), 'Stylized Image')
         psnr_score = psnr(pil_grayscale(stylized_image), pil_grayscale(style_image))
-        print("\tMSE = {} \tPSNR = {}".format(mse_score, psnr_score))
+        ssim_score = tf.image.ssim(stylized_image, style_image, max_val=1.0).numpy()[0]
+        print("\tPSNR = {} \tSSIM = {}".format(psnr_score, ssim_score))
         file_name = args.save_dir + 'opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
-        if mse_score < error_min:
-            error_min = mse_score
+        if ssim_score < error_min:
+            error_min = ssim_score
             best_image = stylized_image
 
     end = time.time()
