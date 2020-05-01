@@ -50,7 +50,7 @@ seg_layers = style_layers
 def main():
     print(args)
 
-    for i in [1,18,34]:
+    for i in [1, 18, 34]:
         image_path = args.data_dir + str(i) + '.png'
         print(image_path)
         content_image = image_preprocessing(image_path, 'content', input_size, c=3)
@@ -63,7 +63,7 @@ def main():
 
         stylized_image, score = nst(content_image, style_image, seg_masks)
 
-        file_name = args.save_dir + 'seg' + str(i) + '_' + str(int(np.round(score*1e4))) + '.png'
+        file_name = args.save_dir + 'seg' + str(i) + '_' + str(int(np.round(score * 1e4))) + '.png'
         tensor_to_image(stylized_image).save(file_name)
 
 
@@ -74,22 +74,35 @@ def feature_extractor(inputs, layers):
 
 
 def nst(content_image, style_image, seg_masks):
-
     style_features = feature_extractor(style_image, style_layers)
-    content_targets = feature_extractor(content_image, content_layers)
+    content_features = feature_extractor(content_image, content_layers)
     extractor = StyleSegContentModel(style_layers, seg_layers, content_layers)
 
-    resized_masks = []
+    content_masks = []
     for mask in seg_masks:
-        mask = mask[:, :, :, 1]             # only a channel
-        mask = tf.expand_dims(mask, -1)     # redefine the tensor
+        c_mask = mask[:, :, :, 1]  # only a channel
+        c_mask = tf.expand_dims(c_mask, -1)  # redefine the tensor
+        resized_mask = {}
+        for name in content_features.keys():
+            print(content_features[name])
+            s = content_features[name].shape
+            print(s)
+            m = tf.image.resize(c_mask, [s[0], s[1]])  # same size as the content features
+            m = tf.repeat(m, s[2], -1)  # same channels as the content features
+            resized_mask[name] = m
+        content_masks.append(resized_mask)  # list of dicts
+
+    style_masks = []
+    for mask in seg_masks:
+        s_mask = mask[:, :, :, 1]  # only a channel
+        s_mask = tf.expand_dims(s_mask, -1)  # redefine the tensor
         resized_mask = {}
         for name in style_features.keys():
             s = style_features[name].shape
-            m = tf.image.resize(mask, [s[1], s[2]])     # same size as the style features
-            m = tf.repeat(m, s[3], -1)                  # same channels as the style features
+            m = tf.image.resize(s_mask, [s[1], s[2]])  # same size as the style features
+            m = tf.repeat(m, s[3], -1)  # same channels as the style features
             resized_mask[name] = m
-        resized_masks.append(resized_mask)      # list of dicts
+        style_masks.append(resized_mask)  # list of dicts
 
     # ==================================================================================================================
     # Run gradient descent (with regularization term in the loss function)
@@ -98,30 +111,44 @@ def nst(content_image, style_image, seg_masks):
     # Define a tf.Variable to contain the image to optimize
     stylized_image = tf.Variable(content_image)
     best_image = tf.Variable(content_image)
-    h, w, c = content_image.shape[1], content_image.shape[2], content_image.shape[3]
 
     opt = tf.optimizers.Adam(learning_rate=0.02, beta_1=0.99, epsilon=1e-1)
 
     def style_seg_loss(outputs):
         style_outputs = outputs['style']
-        style_loss = 0
-        style_loss += tf.add_n([tf.reduce_mean((gram_matrix(tf.multiply(style_outputs[name], mask[name])) -
-                                                gram_matrix(tf.multiply(style_features[name], mask[name]))) ** 2)
-                                for name in style_outputs.keys()
-                                for mask in resized_masks])
+        style_loss = tf.add_n([tf.reduce_mean((gram_matrix(tf.multiply(style_outputs[name], mask[name])) -
+                                               gram_matrix(tf.multiply(style_features[name], mask[name]))) ** 2)
+                               for name in style_outputs.keys()
+                               for mask in style_masks])
         style_loss *= style_weight / num_style_layers
         return style_loss
 
+    def content_seg_loss(outputs):
+        content_outputs = outputs['content']
+        content_loss = tf.add_n([tf.reduce_mean((gram_matrix(tf.multiply(content_outputs[name], mask[name])) -
+                                                 gram_matrix(tf.multiply(content_features[name], mask[name]))) ** 2)
+                                 for name in content_outputs.keys()
+                                 for mask in content_masks])
+        content_loss *= content_weight / num_content_layers
+        return content_loss
+
     def content_loss(outputs):
         content_outputs = outputs['content']
-        content_loss = tf.add_n([tf.reduce_mean((content_outputs[name] - content_targets[name]) ** 2)
+        content_loss = tf.add_n([tf.reduce_mean((content_outputs[name] - content_features[name]) ** 2)
                                  for name in content_outputs.keys()])
         content_loss *= content_weight / num_content_layers
         return content_loss
 
+    def style_loss(outputs):
+        style_outputs = outputs['style']
+        style_loss = tf.add_n([tf.reduce_mean((style_outputs[name] - style_features[name]) ** 2)
+                               for name in style_outputs.keys()])
+        style_loss *= style_weight / num_style_layers
+        return style_loss
+
     def style_content_loss(outputs):
         """Weighted combination of style and content loss"""
-        loss = style_seg_loss(outputs) + content_loss(outputs)
+        loss = content_seg_loss(outputs) + style_loss(outputs)
         return loss
 
     @tf.function()
@@ -142,7 +169,7 @@ def nst(content_image, style_image, seg_masks):
         print("Epoch: {}".format(n))
         for m in range(steps_per_epoch):
             train_step(stylized_image)
-        mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))    
+        mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
         psnr_score = psnr(pil_grayscale(stylized_image), pil_grayscale(style_image))
         ssim_score = tf.image.ssim(stylized_image, style_image, max_val=1.0).numpy()[0]
         print("\tMSE = {} \tPSNR = {} \tSSIM = {}".format(mse_score, psnr_score, ssim_score))
@@ -158,7 +185,6 @@ def nst(content_image, style_image, seg_masks):
     best_image = np.array(pil_grayscale(best_image))
 
     return best_image, score_max
-
 
 
 def extract_mask(image, show=False):
@@ -185,12 +211,10 @@ def extract_mask(image, show=False):
                 else:
                     mask[i, j] = 0
         if show:
-            Image.fromarray(mask*255).show()
-        mask = np.expand_dims(mask, 0)
-        mask = np.expand_dims(mask, -1)
-        mask = np.repeat(mask, 3, -1)
+            Image.fromarray(mask * 255).show()
+        mask = image_to_tensor(mask, c=3)
         masks.append(mask)
-        
+
     return masks
 
 

@@ -13,6 +13,13 @@ def tensor_to_image(tensor):
     return PIL.Image.fromarray(tensor)
 
 
+def image_to_tensor(image, c):
+    image = np.expand_dims(image, 0)
+    tensor = np.expand_dims(image, -1)
+    tensor = np.repeat(tensor, c, -1)
+    return tensor
+
+
 def load_img(path_to_img):
     max_dim = 1386
     img = tf.io.read_file(path_to_img)
