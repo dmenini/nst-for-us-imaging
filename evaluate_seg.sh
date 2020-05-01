@@ -11,7 +11,7 @@
 NAME=dmenini
 MACHINE=hoss
 PROJECT=nst-for-us-imaging
-ENV=tfenv
+ENV=tencu
 
 IMAGES=(1 18 34)
 SCRIPT=us_nst_segmentation.py

@@ -52,8 +52,8 @@ def read_image_as_tensor(path_to_img, c=1):
     return img
 
 
-def scale_image(img):
-    max_dim = 1386
+def scale_image(img, size):
+    max_dim = size
     #print('Input shape pre resizing:', img.shape)
     shape = tf.cast(tf.shape(img)[:-1], tf.float32)
     long_dim = max(shape)
@@ -70,7 +70,7 @@ def rgb2gray(rgb):
     return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
 
 
-def image_preprocessing(image_path, object, c=3):
+def image_preprocessing(image_path, object, size, c=3):
     image = read_image_as_tensor(image_path, c=c)
     (h, w, c) = image.shape
 
@@ -84,7 +84,7 @@ def image_preprocessing(image_path, object, c=3):
         print("Object must be either 'segmentation', 'content' or 'style'")
         return 1
 
-    image = scale_image(image)
+    image = scale_image(image, size)
 
     return image
 

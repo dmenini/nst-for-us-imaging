@@ -24,6 +24,8 @@ parser.add_argument('--epochs', metavar='weights', type=int,
                     default=25, help='Max number of epochs.')
 parser.add_argument('--steps', metavar='steps_per_epoch', type=int,
                     default=50, help='Number of steps per epoch.')
+parser.add_argument('--size', metavar='input_size', type=int,
+                    default=1386, help='Number of steps per epoch.')
 args = parser.parse_args()
 
 style_weight = args.weights[0]
@@ -31,6 +33,7 @@ content_weight = args.weights[1]
 total_variation_weight = args.weights[2]
 epochs = args.epochs
 steps_per_epoch = args.steps
+input_size = args.size
 
 # Content layer where will pull our feature maps
 content_layers = ['block5_conv2']
@@ -52,8 +55,8 @@ def main():
     for i in [1, 18, 34]:
         image_path = args.data_dir + str(i) + '.png'
         print(image_path)
-        content_image = image_preprocessing(image_path, object='content', c=3)
-        style_image = image_preprocessing(image_path, object='style', c=3)
+        content_image = image_preprocessing(image_path, 'content', input_size, c=3)
+        style_image = image_preprocessing(image_path, 'style', input_size, c=3)
 
         # plt.subplot(1, 3, 1)
         # imgshow(content_image, title='Content Image (' + str(content) + ')')
@@ -130,29 +133,27 @@ def long_nst(content_image, style_image, reg=True):
         image.assign(clip_0_1(image))
 
     start = time.time()
-    error_min = 10000
+    score_max = 0
 
     step = 0
     for n in range(epochs):
         print("Epoch: {}".format(n))
         for m in range(steps_per_epoch):
-            step += 1
             train_step(stylized_image)
-            print(".", end='')
-        # imgshow(tensor_to_image(stylized_image), 'Stylized Image')
+        mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))    
         psnr_score = psnr(pil_grayscale(stylized_image), pil_grayscale(style_image))
         ssim_score = tf.image.ssim(stylized_image, style_image, max_val=1.0).numpy()[0]
-        print("\tPSNR = {} \tSSIM = {}".format(psnr_score, ssim_score))
+        print("\tMSE = {} \tPSNR = {} \tSSIM = {}".format(mse_score, psnr_score, ssim_score))
         file_name = args.save_dir + 'opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
-        if ssim_score < error_min:
-            error_min = ssim_score
+        if ssim_score > score_max:
+            score_max = ssim_score
             best_image = stylized_image
 
     end = time.time()
     print("Total time: {:.1f}\n".format(end - start))
 
-    return best_image, error_min
+    return best_image, score_max
 
 
 if __name__ == "__main__":
