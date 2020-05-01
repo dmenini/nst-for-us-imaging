@@ -84,9 +84,7 @@ def nst(content_image, style_image, seg_masks):
         c_mask = tf.expand_dims(c_mask, -1)  # redefine the tensor
         resized_mask = {}
         for name in content_features.keys():
-            print(content_features[name])
             s = content_features[name].shape
-            print(s)
             m = tf.image.resize(c_mask, [s[0], s[1]])  # same size as the content features
             m = tf.repeat(m, s[2], -1)  # same channels as the content features
             resized_mask[name] = m
