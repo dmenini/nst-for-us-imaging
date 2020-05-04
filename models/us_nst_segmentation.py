@@ -76,16 +76,21 @@ def feature_extractor(inputs, layers):
 
 
 def nst(content_image, style_image, seg_masks):
+
+    # ==================================================================================================================
+    # Extract style features content features and resize masks
+    # ==================================================================================================================
+
     style_features = feature_extractor(style_image, style_layers)
     content_features = feature_extractor(content_image, content_layers)
-    extractor = StyleSegContentModel(style_layers, seg_layers, content_layers)
+    extractor = StyleSegContentModel(style_layers, seg_layers, content_layers)  # Needed by train step
 
     content_masks = []
     content_masks = resize_masks(seg_masks, content_features)
     style_masks = resize_masks(seg_masks, style_features)
 
     # ==================================================================================================================
-    # Run gradient descent (with regularization term in the loss function)
+    # Run gradient descent
     # ==================================================================================================================
 
     # Define a tf.Variable to contain the image to optimize
