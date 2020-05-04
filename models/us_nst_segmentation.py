@@ -19,9 +19,11 @@ parser.add_argument('--data-dir', metavar='data_dir', type=str,
                     default='img/data/new_att_all/', help='Directory containing inputs.')
 parser.add_argument('--save-dir', metavar='save_dir', type=str,
                     default='img/result/', help='Directory containing inputs.')
+parser.add_argument('--image', metavar='image', type=int, nargs='+',
+                    default=[1, 18, 36], help='Image number.')
 parser.add_argument('--weights', metavar='weights', type=float, nargs='+',
-                    default=[1e2, 1, 0], help='Style, content and total variation weights.')
-parser.add_argument('--epochs', metavar='weights', type=int,
+                    default=[1e2, 1], help='Style and content weights.')
+parser.add_argument('--epochs', metavar='epochs', type=int,
                     default=25, help='Max number of epochs.')
 parser.add_argument('--steps', metavar='steps_per_epoch', type=int,
                     default=50, help='Number of steps per epoch.')
@@ -50,7 +52,7 @@ seg_layers = style_layers
 def main():
     print(args)
 
-    for i in [18, 34]:
+    for i in args.image:
         image_path = args.data_dir + str(i) + '.png'
         print(image_path)
         content_image = image_preprocessing(image_path, 'content', input_size, c=3)
@@ -79,28 +81,8 @@ def nst(content_image, style_image, seg_masks):
     extractor = StyleSegContentModel(style_layers, seg_layers, content_layers)
 
     content_masks = []
-    for mask in seg_masks:
-        c_mask = mask[:, :, :, 1]  # only a channel
-        c_mask = tf.expand_dims(c_mask, -1)  # redefine the tensor
-        resized_mask = {}
-        for name in content_features.keys():
-            s = content_features[name].shape
-            m = tf.image.resize(c_mask, [s[0], s[1]])  # same size as the content features
-            m = tf.repeat(m, s[2], -1)  # same channels as the content features
-            resized_mask[name] = m
-        content_masks.append(resized_mask)  # list of dicts
-
-    style_masks = []
-    for mask in seg_masks:
-        s_mask = mask[:, :, :, 1]  # only a channel
-        s_mask = tf.expand_dims(s_mask, -1)  # redefine the tensor
-        resized_mask = {}
-        for name in style_features.keys():
-            s = style_features[name].shape
-            m = tf.image.resize(s_mask, [s[1], s[2]])  # same size as the style features
-            m = tf.repeat(m, s[3], -1)  # same channels as the style features
-            resized_mask[name] = m
-        style_masks.append(resized_mask)  # list of dicts
+    content_masks = resize_masks(seg_masks, content_features)
+    style_masks = resize_masks(seg_masks, style_features)
 
     # ==================================================================================================================
     # Run gradient descent (with regularization term in the loss function)
@@ -154,7 +136,6 @@ def nst(content_image, style_image, seg_masks):
         with tf.GradientTape() as tape:
             outputs = extractor(image)
             loss = style_content_loss(outputs)
-            loss += total_variation_weight * total_variation_loss(image)  # tf.image.total_variation(image)
         grad = tape.gradient(loss, image)
         opt.apply_gradients([(grad, image)])
         image.assign(clip_0_1(image))
@@ -183,35 +164,45 @@ def nst(content_image, style_image, seg_masks):
     return best_image, score_max
 
 
-def extract_mask(image, show=False):
-    image = np.round(np.array(image) * 255.0)
-    image = np.squeeze(image)
-    image = image[:, :, 0]
-    pixel_values = []
-    masks = []
+def extract_mask(im, show=False):
+    im = tensor_to_image(im).convert('L')           # 2D image
+    w, h = im.size                                  # Get image dimensions
+    pixels = list(im.getdata())                     # Get pixel list
 
-    for i in range(image.shape[0]):
-        for j in range(image.shape[1]):
-            if (image[i, j] not in pixel_values) and image[i, j] != 0:
-                pixel_values.append(image[i, j])
+    pixel_values = []                               # List of pixel values (only labels of interest)
+    for pixel in pixels:
+        if pixel not in pixel_values:
+            pixel_values.append(pixel)
+    pixel_values = [int(value) for value in pixel_values if 70 <= value <= 240]
     # print(sorted(pixel_values))
 
-    pixel_values = [int(value) for value in pixel_values if 70 <= value <= 240]
-
+    masks = []                                                      # List of binary masks
     for value in pixel_values:
-        mask = np.zeros_like(image)
-        for i in range(image.shape[0]):
-            for j in range(image.shape[1]):
-                if image[i, j] == value:
-                    mask[i, j] = 1
-                else:
-                    mask[i, j] = 0
+        mask = [1 if pixel == value else 0 for pixel in pixels]     # Create binary mask as a list
+        mask = np.reshape(np.array(mask), [h, w])                   # Reshape as a 2D image (like im)
         if show:
-            Image.fromarray(mask * 255).show()
-        mask = image_to_tensor(mask, c=3)
+            Image.fromarray(mask*255).show()
+        mask = image_to_tensor(mask, c=3)                           # Redefine tensor
         masks.append(mask)
 
     return masks
+
+
+def resize_masks(seg_masks, features):
+    resized_masks = []
+    for mask in seg_masks:
+        mask = mask[:, :, :, 1]                         # Only 1 channel (there are 3 in total)
+        mask = tf.expand_dims(mask, -1)                 # Redefine the tensor
+        resized_mask = {}                               # Define the dict: {layer_name: mask}
+        for name in features.keys():
+            s = features[name].shape                    # Extract feature's shape
+            if len(s) == 3:
+                s = [1] + s                             # If only 3 dimensions, add the 4th at the beginning (=tensor)
+            rm = tf.image.resize(mask, [s[1], s[2]])    # Same w, h as the features (resize method = bilinear)
+            rm = tf.repeat(rm, s[3], -1)                # Same channels as the features
+            resized_mask[name] = rm                     # Assign resized mask to dict label
+        resized_masks.append(resized_mask)              # List of dicts
+    return resized_masks
 
 
 if __name__ == "__main__":

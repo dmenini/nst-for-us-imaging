@@ -61,7 +61,6 @@ def read_image_as_tensor(path_to_img, c=1):
 
 def scale_image(img, size):
     max_dim = size
-    #print('Input shape pre resizing:', img.shape)
     shape = tf.cast(tf.shape(img)[:-1], tf.float32)
     long_dim = max(shape)
     scale = max_dim / long_dim
@@ -69,7 +68,6 @@ def scale_image(img, size):
     new_shape = tf.cast(shape * scale, tf.int32)
     img = tf.image.resize(img, new_shape)
     img = img[tf.newaxis, :]
-    #print('Input shape post resizing:', img.shape)
     return img
 
 
