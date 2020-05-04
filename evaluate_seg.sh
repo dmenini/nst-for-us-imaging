@@ -34,8 +34,6 @@ cp ${HOME_NET}/${PROJECT}/models/* ${HOME_NET}/cluster_sub/models/
 mkdir -p ${HOME_GPU}/submission
 for i in ${IMAGES[@]}; do cp ${HOME_NET}/${PROJECT}/${DATA_DIR}/${i}.png ${HOME_GPU}/submission/; done
 
-nvcc --version
-
 python -u ${HOME_NET}/cluster_sub/models/${SCRIPT} --data-dir ${HOME_GPU}/submission/ --save-dir ${HOME_NET}/${PROJECT}/${SAVE_DIR}
 
 rm -r ${HOME_GPU}/submission

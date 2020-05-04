@@ -20,7 +20,7 @@ parser.add_argument('--data-dir', metavar='data_dir', type=str,
 parser.add_argument('--save-dir', metavar='save_dir', type=str,
                     default='img/result/', help='Directory containing inputs.')
 parser.add_argument('--weights', metavar='weights', type=float, nargs='+',
-                    default=[1e-2, 1e4, 30], help='Style, content and total variation weights.')
+                    default=[1e2, 1, 0], help='Style, content and total variation weights.')
 parser.add_argument('--epochs', metavar='weights', type=int,
                     default=25, help='Max number of epochs.')
 parser.add_argument('--steps', metavar='steps_per_epoch', type=int,
@@ -50,7 +50,7 @@ seg_layers = style_layers
 def main():
     print(args)
 
-    for i in [1, 18, 34]:
+    for i in [18, 34]:
         image_path = args.data_dir + str(i) + '.png'
         print(image_path)
         content_image = image_preprocessing(image_path, 'content', input_size, c=3)
@@ -123,17 +123,10 @@ def nst(content_image, style_image, seg_masks):
 
     def content_seg_loss(outputs):
         content_outputs = outputs['content']
-        content_loss = tf.add_n([tf.reduce_mean((gram_matrix(tf.multiply(content_outputs[name], mask[name])) -
-                                                 gram_matrix(tf.multiply(content_features[name], mask[name]))) ** 2)
+        content_loss = tf.add_n([tf.reduce_mean(((tf.multiply(content_outputs[name], mask[name])) -
+                                                 (tf.multiply(content_features[name], mask[name]))) ** 2)
                                  for name in content_outputs.keys()
                                  for mask in content_masks])
-        content_loss *= content_weight / num_content_layers
-        return content_loss
-
-    def content_loss(outputs):
-        content_outputs = outputs['content']
-        content_loss = tf.add_n([tf.reduce_mean((content_outputs[name] - content_features[name]) ** 2)
-                                 for name in content_outputs.keys()])
         content_loss *= content_weight / num_content_layers
         return content_loss
 
@@ -143,6 +136,13 @@ def nst(content_image, style_image, seg_masks):
                                for name in style_outputs.keys()])
         style_loss *= style_weight / num_style_layers
         return style_loss
+
+    def content_loss(outputs):
+        content_outputs = outputs['content']
+        content_loss = tf.add_n([tf.reduce_mean((content_outputs[name] - content_features[name]) ** 2)
+                                 for name in content_outputs.keys()])
+        content_loss *= content_weight / num_content_layers
+        return content_loss
 
     def style_content_loss(outputs):
         """Weighted combination of style and content loss"""
@@ -164,13 +164,13 @@ def nst(content_image, style_image, seg_masks):
     score_max = 0
 
     for n in range(epochs):
-        print("Epoch: {}".format(n))
+        print("Epoch: {}".format(n), end='\t')
         for m in range(steps_per_epoch):
             train_step(stylized_image)
         mse_score = mse(pil_grayscale(stylized_image), pil_grayscale(style_image))
         psnr_score = psnr(pil_grayscale(stylized_image), pil_grayscale(style_image))
         ssim_score = tf.image.ssim(stylized_image, style_image, max_val=1.0).numpy()[0]
-        print("\tMSE = {} \tPSNR = {} \tSSIM = {}".format(mse_score, psnr_score, ssim_score))
+        print("\tMSE = {:.7f} \tPSNR = {:.7f}  \tSSIM = {:.7f}".format(mse_score, psnr_score, ssim_score))
         file_name = args.save_dir + 'opt/ep_' + str(n) + '.png'
         tensor_to_image(stylized_image).save(file_name)
         if ssim_score > score_max:
@@ -179,8 +179,6 @@ def nst(content_image, style_image, seg_masks):
 
     end = time.time()
     print("Total time: {:.1f}\n".format(end - start))
-
-    best_image = np.array(pil_grayscale(best_image))
 
     return best_image, score_max
 
