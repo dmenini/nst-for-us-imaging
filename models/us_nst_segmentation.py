@@ -19,6 +19,8 @@ parser.add_argument('--data-dir', metavar='data_dir', type=str,
                     default='img/data/new_att_all/', help='Directory containing inputs.')
 parser.add_argument('--save-dir', metavar='save_dir', type=str,
                     default='img/result/', help='Directory containing inputs.')
+parser.add_argument('--image', metavar='image', type=int, nargs='+',
+                    default=[1, 18, 36], help='Image number.')
 parser.add_argument('--weights', metavar='weights', type=float, nargs='+',
                     default=[1e2, 1, 0], help='Style, content and total variation weights.')
 parser.add_argument('--epochs', metavar='weights', type=int,
@@ -50,7 +52,7 @@ seg_layers = style_layers
 def main():
     print(args)
 
-    for i in [18, 34]:
+    for i in args.image:
         image_path = args.data_dir + str(i) + '.png'
         print(image_path)
         content_image = image_preprocessing(image_path, 'content', input_size, c=3)
