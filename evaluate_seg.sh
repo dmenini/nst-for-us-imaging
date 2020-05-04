@@ -31,12 +31,12 @@ conda activate ${ENV}
 mkdir -p ${HOME_NET}/${PROJECT}/models/
 mkdir -p ${HOME_NET}/cluster_sub/models/
 cp ${HOME_NET}/${PROJECT}/models/* ${HOME_NET}/cluster_sub/models/
-mkdir -p ${HOME_GPU}/submission
+mkdir -p ${HOME_GPU}/submission/
 
 for i in ${IMAGES[@]}
 do
-cp ${HOME_NET}/${PROJECT}/${DATA_DIR}/${i}.png ${HOME_GPU}/submission/
-python -u ${HOME_NET}/cluster_sub/models/${SCRIPT} --data-dir ${HOME_GPU}/submission/ --save-dir ${HOME_NET}/${PROJECT}/${SAVE_DIR} --image ${IMAGES[${i}]} "$@"
+cp ${HOME_NET}/${PROJECT}/${DATA_DIR}/${i}.png ${HOME_GPU}/submission
+python -u ${HOME_NET}/cluster_sub/models/${SCRIPT} --data-dir ${HOME_GPU}/submission/ --save-dir ${HOME_NET}/${PROJECT}/${SAVE_DIR} --image ${i} "$@"
 done
 
 rm -r ${HOME_GPU}/submission
