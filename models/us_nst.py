@@ -18,19 +18,20 @@ parser.add_argument('--data-dir', metavar='data_dir', type=str,
                     default='img/data/new_att_all/', help='Directory containing inputs.')
 parser.add_argument('--save-dir', metavar='save_dir', type=str,
                     default='img/result/', help='Directory containing inputs.')
+parser.add_argument('--image', metavar='image', type=int, nargs='+',
+                    default=[1, 18, 34], help='Image number.')
 parser.add_argument('--weights', metavar='weights', type=float, nargs='+',
-                    default=[1e-2, 1e4, 30], help='Style, content and total variation weights.')
+                    default=[1e2, 1], help='Style and content weights.')
 parser.add_argument('--epochs', metavar='weights', type=int,
-                    default=25, help='Max number of epochs.')
+                    default=50, help='Max number of epochs.')
 parser.add_argument('--steps', metavar='steps_per_epoch', type=int,
-                    default=50, help='Number of steps per epoch.')
+                    default=15, help='Number of steps per epoch.')
 parser.add_argument('--size', metavar='input_size', type=int,
                     default=1386, help='Number of steps per epoch.')
 args = parser.parse_args()
 
 style_weight = args.weights[0]
 content_weight = args.weights[1]
-total_variation_weight = args.weights[2]
 epochs = args.epochs
 steps_per_epoch = args.steps
 input_size = args.size
@@ -52,7 +53,7 @@ num_style_layers = len(style_layers)
 def main():
     print(args)
 
-    for i in [1, 18, 34]:
+    for i in args.image:
         image_path = args.data_dir + str(i) + '.png'
         print(image_path)
         content_image = image_preprocessing(image_path, 'content', input_size, c=3)
@@ -74,7 +75,7 @@ def main():
         # plt.close()
 
         file_name = args.save_dir + 'basic_' + str(i) + '_' + str(int(np.round(score))) + '.png'
-        pil_grayscale(stylized_image).save(file_name)
+        tensor_to_image(stylized_image).convert('L').save(file_name)
 
 
 def quick_nst(content_image, style_image):
@@ -126,11 +127,10 @@ def long_nst(content_image, style_image, reg=True):
         with tf.GradientTape() as tape:
             outputs = extractor(image)
             loss = style_content_loss(outputs)
-            if reg:
-                loss += total_variation_weight * total_variation_loss(image)  # tf.image.total_variation(image)
         grad = tape.gradient(loss, image)
         opt.apply_gradients([(grad, image)])
         image.assign(clip_0_1(image))
+        #image.assign(tf.repeat(tf.image.rgb_to_grayscale(image), 3, -1))
 
     start = time.time()
     score_max = 0

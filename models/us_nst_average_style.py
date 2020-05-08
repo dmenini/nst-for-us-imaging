@@ -18,8 +18,10 @@ parser.add_argument('--data-dir', metavar='data_dir', type=str,
                     default='img/data/new_att_all/', help='Directory containing inputs.')
 parser.add_argument('--save-dir', metavar='save_dir', type=str,
                     default='img/result/', help='Directory containing inputs.')
+parser.add_argument('--image', metavar='image', type=int, nargs='+',
+                    default=[1, 18, 34], help='Image number.')
 parser.add_argument('--weights', metavar='weights', type=float, nargs='+',
-                    default=[1e-2, 1e4, 30], help='Style, content and total variation weights.')
+                    default=[1e2, 1], help='Style and content weights.')
 parser.add_argument('--epochs', metavar='weights', type=int,
                     default=25, help='Max number of epochs.')
 parser.add_argument('--steps', metavar='steps_per_epoch', type=int,
@@ -32,7 +34,6 @@ args = parser.parse_args()
 
 style_weight = args.weights[0]
 content_weight = args.weights[1]
-total_variation_weight = args.weights[2]
 epochs = args.epochs
 steps_per_epoch = args.steps
 
@@ -69,7 +70,7 @@ def main():
         with open(dict_filename, 'rb') as handle:
             style_target = pickle.load(handle)
 
-    for j in [1, 18, 34]:
+    for j in args.image:
 
         image_path = args.data_dir + str(j) + '.png'
         print(image_path)
@@ -138,6 +139,7 @@ def nst(content_image, style_image, content_target, style_target, reg=True):
         grad = tape.gradient(loss, image)
         opt.apply_gradients([(grad, image)])
         image.assign(clip_0_1(image))
+        image.assign(tf.repeat(tf.image.rgb_to_grayscale(image), 3, -1))
 
     start = time.time()
     error_min = 10000
