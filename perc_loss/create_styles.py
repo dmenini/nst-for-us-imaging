@@ -1,8 +1,7 @@
 from PIL import Image
-from img_lib import *
 
 
-for i in range(1,4000):
+for i in range(1,6670):
     image_path = 'img/data/new_att_all/' + str(i) + '.png'
     print(image_path)
 

@@ -6,9 +6,9 @@ import numpy as np
 
 # opens and returns image file as a PIL image (0-255)
 def load_image(filename):
-    img = Image.open(filename)
-    img = np.expand_dims(img,2)
-    img = np.repeat(img, 3, 2)
+    img = Image.open(filename).convert('RGB')
+    #img = np.expand_dims(img,2)
+    #img = np.repeat(img, 3, 2)
     return img
 
 # assumes data comes in batch form (ch, h, w)
@@ -17,7 +17,7 @@ def save_image(filename, data):
     mean = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))
     img = data.clone().numpy()
     img = ((img * std + mean).transpose(1, 2, 0)*255.0).clip(0, 255).astype("uint8")
-    img = Image.fromarray(img)
+    img = Image.fromarray(img).convert('L')
     img.save(filename)
 
 # Calculate Gram matrix (G = FF^T)

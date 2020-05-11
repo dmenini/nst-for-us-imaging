@@ -66,8 +66,9 @@ def load_masks(seg, shape):
     labels = [int(value) for value in labels if 70 <= value <= 240]
     masks = [tf.expand_dims(tf.expand_dims(tf.constant(_extract_mask(seg, label)), 0), -1) for label in labels]
 
-    # masks = [mask for mask in masks if np.sum(mask) > w*h*3*0.002]     # Filter out small masks to save memory for the GPU (max 10 masks allowed)
-    return masks
+    # masks = [mask for mask in masks if np.sum(np.array(mask)) > 1386*1000*3*0.005]     # Filter out small masks to save memory for the GPU (max 10 masks allowed)
+    masks = masks[0]
+    return [masks]
 
 def gram_matrix(activations):
     height = tf.shape(activations)[1]
@@ -79,7 +80,7 @@ def gram_matrix(activations):
     return gram_matrix
 
 def content_loss(const_layer, var_layer, weight):
-    return tf.reduce_mean(tf.squared_difference(const_layer, var_layer)) * weight
+    return tf.reduce_mean(tf.math.squared_difference(const_layer, var_layer)) * weight
 
 def style_loss(CNN_structure, const_layers, var_layers, content_segs, style_segs, weight):
     loss_styles = []
@@ -97,16 +98,19 @@ def style_loss(CNN_structure, const_layers, var_layers, content_segs, style_segs
             style_seg_width, style_seg_height = int(math.ceil(style_seg_width / 2)), int(math.ceil(style_seg_height / 2))
 
             for i in range(len(content_segs)):
-                content_segs[i] = tf.image.resize_bilinear(content_segs[i], tf.constant((content_seg_height, content_seg_width)))
-                style_segs[i] = tf.image.resize_bilinear(style_segs[i], tf.constant((style_seg_height, style_seg_width)))
+                content_segs[i] = tf.compat.v1.image.resize_bilinear(content_segs[i], tf.constant((content_seg_height, content_seg_width)))
+                style_segs[i] = tf.compat.v1.image.resize_bilinear(style_segs[i], tf.constant((style_seg_height, style_seg_width)))
 
         elif "conv" in layer_name:
             for i in range(len(content_segs)):
                 # have some differences on border with torch
                 content_segs[i] = tf.nn.avg_pool(tf.pad(content_segs[i], [[0, 0], [1, 1], [1, 1], [0, 0]], "CONSTANT"), \
                 ksize=[1, 3, 3, 1], strides=[1, 1, 1, 1], padding='VALID')
+                x = style_segs[i]
                 style_segs[i] = tf.nn.avg_pool(tf.pad(style_segs[i], [[0, 0], [1, 1], [1, 1], [0, 0]], "CONSTANT"), \
                 ksize=[1, 3, 3, 1], strides=[1, 1, 1, 1], padding='VALID')
+                y = style_segs[i]
+                print(tf.math.equal(x,y))
 
         if layer_name == var_layers[layer_index].name[var_layers[layer_index].name.find("/") + 1:]:
             print("Setting up style layer: <{}>".format(layer_name))
@@ -120,14 +124,14 @@ def style_loss(CNN_structure, const_layers, var_layers, content_segs, style_segs
                 gram_matrix_const = gram_matrix(tf.multiply(const_layer, style_seg))
                 style_mask_mean   = tf.reduce_mean(style_seg)
                 gram_matrix_const = tf.cond(tf.greater(style_mask_mean, 0.),
-                                        lambda: gram_matrix_const / (tf.to_float(tf.size(const_layer)) * style_mask_mean),
+                                        lambda: gram_matrix_const / (tf.cast(tf.size(const_layer), np.float32) * style_mask_mean),
                                         lambda: gram_matrix_const
                                     )
 
                 gram_matrix_var   = gram_matrix(tf.multiply(var_layer, content_seg))
                 content_mask_mean = tf.reduce_mean(content_seg)
                 gram_matrix_var   = tf.cond(tf.greater(content_mask_mean, 0.),
-                                        lambda: gram_matrix_var / (tf.to_float(tf.size(var_layer)) * content_mask_mean),
+                                        lambda: gram_matrix_var / (tf.cast(tf.size(var_layer), np.float32) * content_mask_mean),
                                         lambda: gram_matrix_var
                                     )
 
@@ -140,6 +144,7 @@ def style_loss(CNN_structure, const_layers, var_layers, content_segs, style_segs
 
 def total_variation_loss(output, weight):
     shape = output.get_shape()
+
     tv_loss = tf.reduce_sum((output[:, :-1, :-1, :] - output[:, :-1, 1:, :]) * (output[:, :-1, :-1, :] - output[:, :-1, 1:, :]) + \
               (output[:, :-1, :-1, :] - output[:, 1:, :-1, :]) * (output[:, :-1, :-1, :] - output[:, 1:, :-1, :])) / 2.0
     return tv_loss * weight
@@ -148,16 +153,20 @@ def save_result(img_, str_):
     result = Image.fromarray(np.uint8(np.clip(img_, 0, 255.0)))
     result.save(str_)
 
+def mse(result, true):
+    result = tf.image.rgb_to_grayscale(result) * 255.0
+    true = tf.image.rgb_to_grayscale(true) * 255.0
+    return tf.reduce_mean(tf.squared_difference(result, true))
+
 iter_count = 0
 min_loss, best_image = float("inf"), None
-def print_loss(args, loss_content, loss_styles_list, loss_tv, loss_affine, overall_loss, output_image):
+def print_loss(args, loss_content, loss_styles_list, loss_tv, overall_loss, output_image):
     global iter_count, min_loss, best_image
     if iter_count % args.print_iter == 0:
         print('Iteration {} / {}\n\tContent loss: {}'.format(iter_count, args.max_iter, loss_content))
         for j, style_loss in enumerate(loss_styles_list):
             print('\tStyle {} loss: {}'.format(j + 1, style_loss))
         print('\tTV loss: {}'.format(loss_tv))
-        print('\tAffine loss: {}'.format(loss_affine))
         print('\tTotal loss: {}'.format(overall_loss - loss_affine))
 
     if overall_loss < min_loss:
@@ -180,6 +189,8 @@ def stylize(args):
     w, h = full_image.size
 
     content_image = rgb2bgr(np.array(full_image.crop((0, 0, w/3, h)).convert("RGB"), dtype=np.float32))
+    save_result(content_image, 'cont.png')
+
     width, height = content_image.shape[1], content_image.shape[0]
     content_image = content_image.reshape((1, height, width, 3)).astype(np.float32)
 
@@ -238,7 +249,7 @@ def stylize(args):
         overall_loss = loss_content + loss_tv + loss_style
 
         optimizer = tf.contrib.opt.ScipyOptimizerInterface(overall_loss, method='L-BFGS-B', options={'maxiter': args.epochs, 'disp': 0})
-        # sess.run(tf.global_variables_initializer())
+        sess.run(tf.compat.v1.global_variables_initializer())
         print_loss_partial = partial(print_loss, args)
         optimizer.minimize(sess, fetches=[loss_content, loss_styles_list, loss_tv, overall_loss, input_image_plus], loss_callback=print_loss_partial)
 
@@ -248,12 +259,12 @@ def stylize(args):
         return best_result
     else:
         VGGNetLoss = loss_content + loss_tv + loss_style
-        optimizer = tf.train.AdamOptimizer(learning_rate=1e-2, beta1=0.9, beta2=0.999, epsilon=1e-08)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=1e-2, beta1=0.9, beta2=0.999, epsilon=1e-08)
         VGG_grads = optimizer.compute_gradients(VGGNetLoss, [input_image])
 
         train_op = optimizer.apply_gradients(VGG_grads)
 
-        # sess.run(tf.global_variables_initializer())
+        sess.run(tf.compat.v1.global_variables_initializer())
         min_loss, best_image = float("inf"), None
         for i in range(1, args.epochs):
             _, loss_content_, loss_styles_list_, loss_tv_, overall_loss_, output_image_ = sess.run([
@@ -275,9 +286,11 @@ def stylize(args):
         return best_image
 
 def main():
+    print(args)
     best_image_bgr = stylize(args)
     result = Image.fromarray(np.uint8(np.clip(best_image_bgr[:, :, ::-1], 0, 255.0)))
-    result.save(args.output_image)
+    # result = result.convert('L')
+    result.save(args.save_dir + '/segmentation' + str(args.image) + '.png')
 
 if __name__ == "__main__":
     main()
