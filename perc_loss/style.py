@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision import transforms
 
+import pytorch_ssim
 import utils
 from network import ImageTransformNet
 from vgg16 import Vgg16
@@ -18,51 +19,42 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 parser = argparse.ArgumentParser(description='style transfer in pytorch')
-subparsers = parser.add_subparsers(title="subcommands", dest="subcommand")
-
-parser.add_argument('--data-dir', type=str,  default='img/data/new_att_all/', help='Directory containing input images.')
-parser.add_argument('--save-dir', type=str, default='img/result/', help='Directory where to store the results.')
-parser.add_argument('--image', type=int, default=1, help='Input image number.')
-parser.add_argument('--gpu', type=int, default=1, help='Use GPU or not.')
-
-train_parser = subparsers.add_parser("train", help="train a model to do style transfer")
-train_parser.add_argument('--style-dir', type=str,  default='img/style_dataset/', help='Path to directory of style_loss.')
-train_parser.add_argument("--visualize", type=int, default=1, help="Set to 1 if you want to visualize training")
-train_parser.add_argument("--weights", dest='weights', nargs='+', type=float, default=[1e5, 1e0, 1e-7], help="weight of content loss, style loss, tv loss")
-train_parser.add_argument("--batch-size", dest='batch_size', type=int, default=4, help="batch size")
-train_parser.add_argument("--image-size", dest='image_size', type=int, default=512, help="input size")
-train_parser.add_argument("--epochs", dest='epochs', type=int, default=10, help="epochs")
-
-style_parser = subparsers.add_parser("transfer", help="do style transfer with a trained model")
-style_parser.add_argument("--model-path", type=str, default='perc_loss/us_style.model', help="path to a pretrained model for a style image")
-
-args = parser.parse_args()
-
-dtype = torch.float64 
-if args.gpu:
-    use_cuda = True
-    print("Current device: %d" %torch.cuda.current_device())
-    dtype = torch.cuda.FloatTensor
-
+parser.add_argument('--mode',       dest='mode',        type=str,   default='train',                help='Train or transfer')
+parser.add_argument('--data-dir',   dest='data_dir',    type=str,   default='img/data/new_att_all', help='Directory containing input images.')
+parser.add_argument('--save-dir',   dest='save_dir',    type=str,   default='img/result',           help='Directory where to store the results.')
+parser.add_argument('--image',      dest='image',       type=int,   default=1,                      help='Input image number.')
+parser.add_argument("--model-path", dest='model_path',  type=str,   default='perc_loss',            help="Path to write/read a pretrained model for a style image")
+parser.add_argument('--gpu',        dest='gpu',         type=int,   default=0,                      help='Use GPU or not.')
+parser.add_argument('--style-dir',  dest='style_dir',   type=str,   default='img/style_dataset',    help='Path to directory of style_loss.')
+parser.add_argument("--visualize",  dest='visualize',   type=int,   default=1,                      help="Set to 1 if you want to visualize training")
+parser.add_argument("--weights",    dest='weights',     type=float, default=[1e5, 1e0, 1e-7],       help="weight of style loss, content loss, tv loss", nargs='+')
+parser.add_argument("--batch-size", dest='batch_size',  type=int,   default=4,                      help="batch size")
+parser.add_argument("--image-size", dest='image_size',  type=int,   default=512,                    help="input size")
+parser.add_argument("--epochs",     dest='epochs',      type=int,   default=10,                     help="epochs")
 
 
 def train(args):
 
+    dtype = torch.float64 
+    if args.gpu:
+        use_cuda = True
+        print("Current device: %d" %torch.cuda.current_device())
+        dtype = torch.cuda.FloatTensor
+
     # visualization of training controlled by flag
-    visualize = (args.visualize != None)
-    if (visualize):
-        img_transform_512 = transforms.Compose([
+    if (args.visualize):
+        img_transform = transforms.Compose([
             transforms.Grayscale(3),
-            transforms.Resize(512),                  # scale shortest side to image_size
-            transforms.CenterCrop(512),             # crop center image_size out
+            transforms.Resize(args.image_size),                  # scale shortest side to image_size
+            transforms.CenterCrop(args.image_size),             # crop center image_size out
             transforms.ToTensor(),                  # turn image from [0-255] to [0-1]
-            # utils.normalize_tensor_transform()      # normalize with ImageNet values
+            utils.normalize_tensor_transform()      # normalize with ImageNet values
         ])
         image_path = args.data_dir + '/' + str(args.image) + '.png'
         testImage = utils.load_image(image_path)
         w, h = testImage.size
         testImage = testImage.crop((0, 0, w/3, h))
-        testImage = img_transform_512(testImage)
+        testImage = img_transform(testImage)
         testImage = Variable(testImage.repeat(1, 1, 1, 1), requires_grad=False).type(dtype)
 
     # define network
@@ -77,18 +69,18 @@ def train(args):
     # get training dataset
     dataset_transform = transforms.Compose([
         transforms.Grayscale(3),
-        transforms.Resize(args.image_size),           # scale shortest side to image_size
+        transforms.Resize(args.image_size),          # scale shortest side to image_size
         transforms.CenterCrop(args.image_size),      # crop center image_size out
-        transforms.ToTensor()                       # turn image from [0-255] to [0-1]
-        # utils.normalize_tensor_transform()        # normalize with ImageNet values
+        transforms.ToTensor(),                       # turn image from [0-255] to [0-1]
+        utils.normalize_tensor_transform()           # normalize with ImageNet values
     ])
     train_dataset = datasets.ImageFolder(args.style_dir, dataset_transform)
     train_loader = DataLoader(train_dataset, batch_size = args.batch_size)
 
     # style image
     style_transform = transforms.Compose([
-        transforms.ToTensor()                  # turn image from [0-255] to [0-1]
-        #utils.normalize_tensor_transform()      # normalize with ImageNet values
+        transforms.ToTensor(),             # turn image from [0-255] to [0-1]
+        utils.normalize_tensor_transform()      # normalize with ImageNet values
     ])
     image_path = args.style_dir + '/new_att_all/' + str(args.image) + '.png'
     style = utils.load_image(image_path)
@@ -139,7 +131,6 @@ def train(args):
             aggregate_content_loss += content_loss.item()
 
             # calculate total variation regularization (anisotropic version)
-            # https://www.wikiwand.com/en/Total_variation_denoising
             diff_i = torch.sum(torch.abs(y_hat[:, :, :, 1:] - y_hat[:, :, :, :-1]))
             diff_j = torch.sum(torch.abs(y_hat[:, :, 1:, :] - y_hat[:, :, :-1, :]))
             tv_loss = args.weights[2]*(diff_i + diff_j)
@@ -154,69 +145,95 @@ def train(args):
 
             # print out status message
             if ((batch_num + 1) % 100 == 0):
-                status = "Epoch {}:  [{}/{}]  Batch:[{}]  agg_style: {:.6f}  agg_content: {:.6f}  agg_tv: {:.6f}  style: {:.6f}  content: {:.6f}  tv: {:.6f} ".format(
-                                e + 1, img_count, len(train_dataset), batch_num+1,
+                status = "Epoch {}:\t [{}/{}]\t Batch:[{}]\t agg_style: {:.6f}\t agg_content: {:.6f}\t agg_tv: {:.6f}\t style: {:.6f}\t content: {:.6f}\t tv: {:.6f}".format(
+                                e+1, img_count, len(train_dataset), batch_num+1,
                                 aggregate_style_loss/(batch_num+1.0), aggregate_content_loss/(batch_num+1.0), aggregate_tv_loss/(batch_num+1.0),
                                 style_loss.item(), content_loss.item(), tv_loss.item()
                             )
                 print(status)
 
-            if ((batch_num + 1) % 1000 == 0) and (visualize):
-                image_transformer.eval()
+        if (args.visualize):
+            image_transformer.eval()
 
-                outputTestImage = image_transformer(testImage).cpu()
-                out_path = args.save_dir + "/opt/perc%d_%d_%d.png" %(args.image, e+1, batch_num+1)
-                utils.save_image(out_path, outputTestImage.data[0])
+            outputTestImage = image_transformer(testImage).cpu()
+            out_path = args.save_dir + "/opt/perc%d_%d.png" %(args.image, e+1)
+            utils.save_image(out_path, outputTestImage.data[0])
 
-                image_transformer.train()
+            image_transformer.train()
 
     # save model
     image_transformer.eval()
 
-    filename = "perc_loss/us_style.model"
+    filename = args.model_path + '/us_style_' + str(args.image_size) + '.model'
     torch.save(image_transformer.state_dict(), filename)
 
 
 def style_transfer(args):
     # works on cpu, not sure on gpu
 
+    dtype = torch.float64 
+    if args.gpu:
+        use_cuda = True
+        print("Current device: %d" %torch.cuda.current_device())
+        dtype = torch.cuda.FloatTensor
+
     # content image
-    img_transform_512 = transforms.Compose([
+    img_transform = transforms.Compose([
             transforms.Grayscale(3),
-            transforms.Resize(512),                 # scale shortest side to image_size
-            transforms.CenterCrop(512),             # crop center image_size out
-            transforms.ToTensor(),                  # turn image from [0-255] to [0-1]
-            # utils.normalize_tensor_transform()      # normalize with ImageNet values
+            transforms.Resize(args.image_size),                 # scale shortest side to image_size
+            transforms.CenterCrop(args.image_size),             # crop center image_size out
+            transforms.ToTensor(),                              # turn image from [0-255] to [0-1]
+            utils.normalize_tensor_transform()                  # normalize with ImageNet values
     ])
 
-    content = utils.load_image(args.data_dir + '/' + str(args.image) + '.png')
-    w, h = content.size
-    content = content.crop((0, 0, w/3, h))
-    content = img_transform_512(content)
+    image_path = args.data_dir + '/' + str(args.image) + '.png'
+    image = utils.load_image(image_path)
+    w, h = image.size
+
+    style = image.crop((w/3, 0, w/3*2, h))
+    style = img_transform(style)
+    style = style.unsqueeze(0)
+
+    content = image.crop((0, 0, w/3, h))
+    content = img_transform(content)
     content = content.unsqueeze(0)
     content = Variable(content).type(dtype)
 
     # load style model
+    filename = args.model_path + '/us_style_512.model'
     style_model = ImageTransformNet().type(dtype)
     if args.gpu == 0:
-        style_model.load_state_dict(torch.load(args.model_path, map_location='cpu'))
+        style_model.load_state_dict(torch.load(filename, map_location='cpu'))
     else:
-        style_model.load_state_dict(torch.load(args.model_path))
+        style_model.load_state_dict(torch.load(filename))
+
+    n_par = sum(p.numel() for p in style_model.parameters() if p.requires_grad)
+    print("The pretrained model {} has {} parameters.".format(filename, n_par))
 
     # process input image
     stylized = style_model(content).cpu()
-    utils.save_image(args.save_dir + '/' + str(args.image) + '.png', stylized.data[0])
+
+    stylized = utils.save_image(args.save_dir + '/perc' + str(args.image) + '.png', stylized.data[0])
+    style = utils.save_image(args.save_dir + '/style' + str(args.image) + '.png', style.data[0])
+
+    stylized = torch.tensor(np.array(stylized.convert('RGB'))).unsqueeze(0)
+    style = torch.tensor(np.array(style.convert('RGB'))).unsqueeze(0)
+
+    mse_score = torch.mean((stylized * 1.0 - style * 1.0) ** 2)
+    psnr_score = 20 * torch.log10(255.0 / torch.sqrt(mse_score))
+    ssim_score = pytorch_ssim.ssim(stylized.type(torch.DoubleTensor), style.type(torch.DoubleTensor)).item()
+    print("\tSCORE:\tMSE = {:.6f} \tPSNR = {:.6f} \tSSIM = {:.6f}".format(mse_score, psnr_score, ssim_score))
 
 
 def main():
+
+    args = parser.parse_args()
     print(args)
 
-    if (args.subcommand == "train"):
+    if args.mode == "train":
         print("Training!")
         train(args)
-
-    # command
-    elif (args.subcommand == "transfer"):
+    elif args.mode == "transfer":
         print("Style transfering!")
         style_transfer(args)
     else:

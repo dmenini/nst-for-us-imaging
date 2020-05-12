@@ -102,6 +102,13 @@ def clip_0_1(image):
     return tf.clip_by_value(image, clip_value_min=0.0, clip_value_max=1.0)
 
 
+def tf_load_image(path_to_image, c):
+    img = tf.io.read_file(path_to_image)
+    img = tf.image.decode_image(img, channels=c)
+    img = tf.image.convert_image_dtype(img, tf.float32)
+    return img
+
+
 def scale_image(img, max_dim):
     shape = tf.cast(tf.shape(img)[:-1], tf.float32)
     long_dim = max(shape)
@@ -120,9 +127,7 @@ def image_preprocessing(path_to_img, object, max_dim, c=3):
     Scale image to the max dimension allowed. 
     """
 
-    img = tf.io.read_file(path_to_img)
-    img = tf.image.decode_image(img, channels=c)
-    img = tf.image.convert_image_dtype(img, tf.float32)
+    img = tf_load_image(path_to_img, c)
 
     (h, w, c) = img.shape
 

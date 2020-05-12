@@ -99,9 +99,11 @@ def extract_masks(seg_image, style_shape, c=1, show=False):
 	for pixel in pixels:
 		if pixel not in labels:
 			labels.append(pixel)
-	print("Segmentation labels:", sorted(labels))
+	labels = sorted(labels)
+	print("Segmentation labels:", labels)
 
 	labels = [int(value) for value in labels if 18 <= value <= 218]
+	masks = []
 	masks = [image_to_tensor((np.array(seg_image) == label).astype(np.float32), c=c) for label in labels]
 
 	mask0 = image_to_tensor((np.array(seg_image) > 59).astype(np.float32), c=c)
@@ -114,6 +116,7 @@ def extract_masks(seg_image, style_shape, c=1, show=False):
 	if show:
 		for mask in masks:
 			tensor_to_image(tf.image.grayscale_to_rgb(mask)).show()
+			input("Press enter to visualize the next mask...")
 
 	masks = [tf.image.resize(mask, style_shape) for mask in masks]
 
@@ -188,7 +191,7 @@ def neural_style_transfer(content_image, style_image, seg_image, args):
 	style_features = extractor(style_image)['style']
 	content_features = extractor(content_image)['content']
 
-	seg_masks = extract_masks(seg_image, [style_image.shape[1], style_image.shape[2]], c=1, show=True)
+	seg_masks = extract_masks(seg_image, [style_image.shape[1], style_image.shape[2]], c=1, show=False)
 	print("Number of masks: {}".format(len(seg_masks)))
 
 	resize_mask(seg_masks[0], style_layers)

@@ -13,7 +13,7 @@ machine=hoss
 project=nst-for-us-imaging
 env=pytcu10
 
-images=1
+image=1
 script=style.py
 
 time=$(date +"%d-%m-%y_%T")
@@ -34,9 +34,9 @@ conda activate ${env}
 
 mkdir -p ${data_dir}/img/new_att_all
 mkdir -p ${save_dir}/opt
-cp ${models_dir}/* ${data_dir}/
+cp -r ${models_dir}/* ${data_dir}/
 cp  ${image_dir}/new_att_all/* ${data_dir}/img/new_att_all/
 
-python -u ${data_dir}/${script} --style-dir ${data_dir}/img --save-dir ${save_dir} --image ${images} --gpu 1 train --visualize 0 "$@"
+python -u ${data_dir}/${script} --style-dir ${data_dir}/img --save-dir ${save_dir} --image ${image} --gpu 1 --visualize 1 "$@"
 
 rm -r ${data_dir}
