@@ -8,16 +8,13 @@ import numpy as np
 # opens and returns image file as a PIL image (0-255)
 def load_image(filename):
     img = Image.open(filename).convert('RGB')
-    #img = np.expand_dims(img,2)
-    #img = np.repeat(img, 3, 2)
     return img
 
 # assumes data comes in batch form (ch, h, w)
-def save_image(filename, data):
-    img = denormalize_tensor_transform(data)
+def save_image(filename, data, norm):
+    img = denormalize_tensor_transform(data, norm)
     img = Image.fromarray(img).convert('L')
     img.save(filename)
-
     return img
 
 # Calculate Gram matrix (G = FF^T)
@@ -29,14 +26,23 @@ def gram(x):
     return G
 
 # using ImageNet values
-def normalize_tensor_transform():
-    return transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+def normalize_tensor_transform(norm):
+    if norm: 
+        std = [0.229, 0.224, 0.225]
+        mean = [0.485, 0.456, 0.406]
+    else:
+        std = [1.0, 1.0, 1.0]
+        mean = [0.0, 0.0, 0.0]
+    return transforms.Normalize(mean=mean, std=std)
 
 
-def denormalize_tensor_transform(data):
-    std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
-    mean = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))
+def denormalize_tensor_transform(data, norm):
+    if norm:
+        std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
+        mean = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))
+    else:
+        std = np.array([1.0, 1.0, 1.0]).reshape((3, 1, 1))
+        mean = np.array([0.0, 0.0, 0.0]).reshape((3, 1, 1))
     img = data.clone().numpy()
     img = ((img * std + mean).transpose(1, 2, 0)*255.0).clip(0, 255).astype("uint8")
 

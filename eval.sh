@@ -1,5 +1,5 @@
 #!/bin/bash
-#$ -o /scratch_net/hoss/dmenini/nst-for-us-imaging/img/gpu_result/
+#$ -o /scratch_net/hoss/dmenini/nst-for-us-imaging/output/gpu_result/
 #$ -S /bin/bash
 #$ -j y
 #$ -cwd
@@ -15,31 +15,30 @@ env=tencu
 
 images=(1 18 34)
 script=us_nst_segmentation.py
-dict_file=avg_style.pickle
 
 time=$(date +"%d-%m-%y_%T")
 
 home_net=/scratch_net/${machine}/${name}
 home_gpu=/scratch/${name}
 
-models_dir=${home_net}/${project}/models
+task_dir=${home_net}/${project}/nst
 image_dir=${home_net}/${project}/img/data/new_att_all
+save_dir=${home_net}/${project}/output/gpu_result/${time}
 
-data_dir=${home_gpu}/submission/${time}
-save_dir=${home_net}/${project}/img/gpu_result/${time}
+sub_dir=${home_gpu}/submission/${time}
 
 source ${home_net}/.bashrc
 
 source ${home_net}/anaconda3/etc/profile.d/conda.sh
 conda activate ${env}
 
-mkdir -p ${data_dir}
+mkdir -p ${sub_dir}
 mkdir -p ${save_dir}/opt
-cp ${models_dir}/* ${data_dir}/
+cp ${task_dir}/* ${sub_dir}/
 
 for i in ${images[@]}; do
-cp ${image_dir}/${i}.png ${data_dir}
-python -u ${data_dir}/${script} --data-dir ${data_dir} --save-dir ${save_dir} --image ${i} "$@"
+cp ${image_dir}/${i}.png ${sub_dir}
+python -u ${sub_dir}/${script} --data-dir ${sub_dir} --save-dir ${save_dir} --image ${i} "$@"
 done
 
-rm -r ${data_dir}
+rm -r ${sub_dir}
