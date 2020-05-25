@@ -14,7 +14,7 @@ project=nst-for-us-imaging
 env=tencu
 
 images=(1 18 34)
-script=segmentation.py
+script=segmentation_seg.py
 
 time=$(date +"%d-%m-%y_%T")
 

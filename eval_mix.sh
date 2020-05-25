@@ -13,8 +13,9 @@ machine=hoss
 project=nst-for-us-imaging
 env=tencu
 
-images=(1 18 34)
-script=segmentation.py
+content=(1 18 34)
+style=(11 28 44)
+script=segmentation_mix.py
 
 time=$(date +"%d-%m-%y_%T")
 
@@ -36,9 +37,10 @@ mkdir -p ${sub_dir}
 mkdir -p ${save_dir}/opt
 cp ${task_dir}/* ${sub_dir}/
 
-for i in ${images[@]}; do
-cp ${image_dir}/${i}.png ${sub_dir}
-python -u ${sub_dir}/${script} --data-dir ${sub_dir} --save-dir ${save_dir} --image ${i} "$@"
+for i in 0 1 2; do
+cp ${image_dir}/${content[${i}]}.png ${sub_dir}
+cp ${image_dir}/${style[${i}]}.png ${sub_dir}
+python -u ${sub_dir}/${script} --data-dir ${sub_dir} --save-dir ${save_dir} --content ${content[${i}]} --style ${style[${i}]} "$@"
 done
 
 rm -r ${sub_dir}

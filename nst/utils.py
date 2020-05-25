@@ -20,7 +20,8 @@ class StyleContentModel(tf.keras.models.Model):
     def call(self, inputs):
         """Expects float input in [0,1]"""
         inputs = inputs * 255.0
-        # inputs = tf.keras.applications.vgg19.preprocess_input(inputs) 	# Subtract VGG_MEAN to the channels, RGB->BGR. Not needed because inputs are BW.
+        inputs = tf.keras.applications.vgg19.preprocess_input(inputs) 	# Subtract VGG_MEAN [103.939, 116.779, 123.68] to the channels, RGB->BGR. Not needed because inputs are BW.
+        # inputs = inputs - 116.779
         outputs = self.vgg(inputs)
         style_outputs, content_outputs = (outputs[:self.num_style_layers],
                                           outputs[self.num_style_layers:])
@@ -50,22 +51,6 @@ def mse(result, true):
     result = tf.image.rgb_to_grayscale(result) * 255.0
     true = tf.image.rgb_to_grayscale(true) * 255.0
     return tf.reduce_mean((result - true)**2)
-
-
-# def resize_masks(seg_masks, features):
-#     resized_masks = []
-#     for mask in seg_masks:
-#         mask = mask[:, :, :, 1]                         # Only 1 channel (there are 3 in total)
-#         mask = tf.expand_dims(mask, -1)                 # Redefine the tensor
-#         resized_mask = {}                               # Define the dict: {layer_name: mask}
-#         for name in features.keys():
-#             s = features[name].shape                    # Extract feature's shape
-#             if len(s) == 3:
-#                 s = [1] + s                             # If only 3 dimensions, add the 4th at the beginning (=tensor)
-#             rm = tf.image.resize(mask, [s[1], s[2]])    # same w, h as the features (resize method = bilinear)
-#             resized_mask[name] = rm                     # Assign resized mask to dict label
-#         resized_masks.append(resized_mask)              # List of dicts
-#     return resized_masks
 
 
 # ==================================================================================================================
@@ -115,7 +100,7 @@ def scale_image(img, max_dim):
     scale = max_dim / long_dim
 
     new_shape = tf.cast(shape * scale, tf.int32)
-    img = tf.image.resize(img, new_shape)
+    img = tf.image.resize(img, new_shape, method='nearest')
     img = img[tf.newaxis, :]
     return img
 
@@ -143,7 +128,3 @@ def image_preprocessing(path_to_img, object, max_dim, c=3):
 
     img = scale_image(img, max_dim)
     return img
-
-
-def pil_grayscale(image):
-    return tensor_to_image(image).convert('L')

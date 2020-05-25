@@ -1,0 +1,27 @@
+(base) dmenini@hoss:/scratch/dmenini/nst-for-us-imaging$ conda activate pytcu10
+(pytcu10) dmenini@hoss:/scratch/dmenini/nst-for-us-imaging$ conda activate pytcu10[13Pscreen -rqsub comparison.sh --epochs 500 --steps 10 --size 1000 --w 0.01 100000 0.01 --message "try some tv losss"M[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Ccd $HOME_NET[K
+[KM[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[7Pqstatcd $HOME_NETqsub comparison.sh --epochs 500 --steps 10 --size 1000 --w 0.01 100000 0.01 --message "try some tv losss"M[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Ccd $HOME_NET[K
+[KM[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[7Pqstatpython perc_loss/create_avg_style.py 
+img/style_dataset/new_att_all/1.png
+img/style_dataset/new_att_all/2.png
+img/style_dataset/new_att_all/3.png
+img/style_dataset/new_att_all/4.png
+img/style_dataset/new_att_all/5.png
+img/style_dataset/new_att_all/6.png
+img/style_dataset/new_att_all/7.png
+img/style_dataset/new_att_all/8.png
+img/style_dataset/new_att_all/9.png
+img/style_dataset/new_att_all/10.png
+img/style_dataset/new_att_all/11.png
+img/style_dataset/new_att_all/12.png
+img/style_dataset/new_att_all/13.png
+img/style_dataset/new_att_all/14.png
+img/style_dataset/new_att_all/15.png
+img/style_dataset/new_att_all/16.png
+img/style_dataset/new_att_all/17.png
+img/style_dataset/new_att_all/18.png
+img/style_dataset/new_att_all/19.png
+img/style_dataset/new_att_all/20.png
+img/style_dataset/new_att_all/21.png
+img/style_dataset/new_att_all/22.png
+img/style_dataset/new_att_all/23.png

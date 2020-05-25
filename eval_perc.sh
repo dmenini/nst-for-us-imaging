@@ -36,6 +36,6 @@ mkdir -p ${save_dir}/opt
 cp -r ${task_dir}/* ${sub_dir}/
 cp  ${dataset_dir}/new_att_all/* ${sub_dir}/img/new_att_all/
 
-python -u ${sub_dir}/${script} --dataset ${sub_dir}/img --save-dir ${save_dir} --gpu 1 --visualize 1 "$@"
+python -u ${sub_dir}/${script} --dataset ${sub_dir}/img --save-dir ${save_dir} --gpu 1 "$@"
 
 rm -r ${sub_dir}

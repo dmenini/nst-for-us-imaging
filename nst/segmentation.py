@@ -22,9 +22,9 @@ parser = argparse.ArgumentParser(description='Optimization parameters and files.
 parser.add_argument('--data-dir', dest='data_dir',    type=str,     default='img/data/new_att_all',     help='Directory containing input images')
 parser.add_argument('--save-dir', dest='save_dir',    type=str,     default='output/result',            help='Directory where to store the results')
 parser.add_argument('--image',    dest='image',       type=int,     default=1,     						help='Input image number')
-parser.add_argument('--weights',  dest='weights',     type=float,   default=[1e-2, 1e4, 1],  nargs='+', help='Style and content weights')
-parser.add_argument('--epochs',   dest='epochs',      type=int,     default=25,                         help='Max number of epochs')
-parser.add_argument('--steps',    dest='steps',       type=int,     default=50,                         help='Number of steps per epoch')
+parser.add_argument('--weights',  dest='weights',     type=float,   default=[1e-2, 1e4, 0],  nargs='+', help='Style and content weights')
+parser.add_argument('--epochs',   dest='epochs',      type=int,     default=300,                        help='Max number of epochs')
+parser.add_argument('--steps',    dest='steps',       type=int,     default=10,                         help='Number of steps per epoch')
 parser.add_argument('--size',     dest='input_size',  type=int,     default=1024,                       help='input size (max dim)')
 parser.add_argument('--loss',     dest='loss',  	  type=int,     default=1,     						help='0=StyleLoss, 1=StyleLoss+')
 parser.add_argument('--message',  dest='message',	  type=str,		default='',							help='Submission description')
@@ -38,6 +38,8 @@ content_layers = ['block5_conv2']
 MAX_SIZE = 1386
 SAVE_INTERVAL = 10
 
+args = parser.parse_args()
+
 def resize_mask(mask, names):
 	"""
 	Resize the input mask as the output layers of vgg19 (style layers).
@@ -45,7 +47,7 @@ def resize_mask(mask, names):
 	A max pool operation in vgg19 is a bilinear resize of the mask (dimensions halved).
 	"""
 	def fake_pool(inputs):
-		return tf.image.resize(inputs, tf.constant((int(math.floor(inputs.shape[1] / 2)), int(math.floor(inputs.shape[2] / 2)))))
+		return tf.image.resize(inputs, tf.constant((int(math.floor(inputs.shape[1] / 2)), int(math.floor(inputs.shape[2] / 2)))), method='nearest')
 
 	def fake_conv(inputs):
 		return tf.nn.avg_pool(inputs, [1, 3, 3, 1], strides=None, padding='SAME')
@@ -83,7 +85,7 @@ def resize_mask(mask, names):
 	return mask_dict
 
 
-def extract_masks(seg_image, style_shape, c=1, show=False):
+def extract_masks(seg_image, style_shape, c=1, visualize=False):
 	"""
 	From the segmentation image, extract the labels and create a binary mask for each label [18, 218].
 	Additionaly, extract a mask for the main object and for the whole foreground.
@@ -92,6 +94,7 @@ def extract_masks(seg_image, style_shape, c=1, show=False):
 	"""
 
 	seg_image = tensor_to_image(seg_image).convert('L')         # Grayscale image
+
 	w, h = seg_image.size                                  		# Get image dimensions
 	pixels = list(seg_image.getdata())                    		# Get pixel list
 
@@ -103,24 +106,26 @@ def extract_masks(seg_image, style_shape, c=1, show=False):
 	print("Segmentation labels:", labels)
 
 	labels = [int(value) for value in labels if 18 <= value <= 218]
-	masks = []
 	masks = [image_to_tensor((np.array(seg_image) == label).astype(np.float32), c=c) for label in labels]
+	mask_dict = {label: mask for mask, label in zip(masks, labels)}
 
 	mask0 = image_to_tensor((np.array(seg_image) > 59).astype(np.float32), c=c)
 	mask1 = image_to_tensor((np.array(seg_image) > 218).astype(np.float32), c=c)
-	masks.append((mask0 - mask1))														# Full object mask
-	masks.append(image_to_tensor((np.array(seg_image) >= 18).astype(np.float32), c=c)) 	# Foreground mask
+	mask_dict.update({'obj_full': (mask0 - mask1)})
+	mask0 = image_to_tensor((np.array(seg_image) > 200).astype(np.float32), c=c)
+	mask1 = image_to_tensor((np.array(seg_image) > 220).astype(np.float32), c=c)
+	mask_dict.update({'obj': (mask0 - mask1)})
+	mask_fg = image_to_tensor((np.array(seg_image) >= 18).astype(np.float32), c=c)
+	mask_dict.update({'fg': mask_fg})
 
-	masks = [mask for mask in masks if np.sum(mask) > w*h*c*0.0005]     # Filter out small masks
+	if visualize:
+		for l in mask_dict.keys():
+			tensor_to_image(tf.image.grayscale_to_rgb(mask_dict[l])).save('output/masks/' + str(args.image) + '_' + str(l) + '.png')
 
-	if show:
-		for mask in masks:
-			tensor_to_image(tf.image.grayscale_to_rgb(mask)).show()
-			input("Press enter to visualize the next mask...")
+	mask_dict = {label: mask_dict[label] for label in mask_dict.keys() if np.sum(mask_dict[label]) > w*h*c*0.0015}     # Filter out small masks
+	mask_dict = {label: tf.image.resize(mask_dict[label], style_shape, method='nearest') for label in mask_dict.keys()}
 
-	masks = [tf.image.resize(mask, style_shape) for mask in masks]
-
-	return masks
+	return mask_dict
 
 
 def gram_matrix(input_tensor):
@@ -181,20 +186,24 @@ def total_variation_loss(output, tv_weight):
 	return tv_loss
 
 
-def neural_style_transfer(content_image, style_image, seg_image, args):
+def neural_style_transfer(image_path, args):
 
 	# ==================================================================================================================
 	# Extract style features, content features and masks
 	# ==================================================================================================================
 
+	style_image = image_preprocessing(image_path, 'style', args.input_size, c=3)
+	content_image = image_preprocessing(image_path, 'content', args.input_size, c=3)
+	seg_image = image_preprocessing(image_path, 'segmentation', MAX_SIZE, c=3)		# Needed MAX_SIZE to preserve labels	
+	
+	# Extract binary masks as dict, then make a list
+	masks = extract_masks(seg_image, [style_image.shape[1], style_image.shape[2]], c=1, visualize=False)
+	masks = [masks[label] for label in masks.keys()]
+	print("Number of masks: {}".format(len(masks)))
+
 	extractor = StyleContentModel(style_layers, content_layers)
 	style_features = extractor(style_image)['style']
 	content_features = extractor(content_image)['content']
-
-	seg_masks = extract_masks(seg_image, [style_image.shape[1], style_image.shape[2]], c=1, show=False)
-	print("Number of masks: {}".format(len(seg_masks)))
-
-	resize_mask(seg_masks[0], style_layers)
 
 	# ==================================================================================================================
 	# Run gradient descent
@@ -229,7 +238,7 @@ def neural_style_transfer(content_image, style_image, seg_image, args):
 	for n in range(args.epochs):
 		print("Epoch: {}".format(n))
 		for m in range(args.steps):
-			loss, loss_style, loss_content, loss_tv = train_step(stylized_image, seg_masks, style_features, content_features, args.weights)
+			loss, loss_style, loss_content, loss_tv = train_step(stylized_image, masks, style_features, content_features, args.weights)
 		mse_score = mse(stylized_image, style_image)
 		psnr_score = tf.image.psnr(stylized_image, style_image, max_val=1.0).numpy()[0]
 		ssim_score = tf.image.ssim(stylized_image, style_image, max_val=1.0).numpy()[0]
@@ -246,13 +255,14 @@ def neural_style_transfer(content_image, style_image, seg_image, args):
 	end = time.time()
 	print("Total time: {:.1f}\n".format(end - start))
 
+	best_image = tf.multiply(best_image, masks[-1])
 	file_name = args.save_dir + '/seg' + str(args.image) + '_' + str(best_epoch) + '.png'
-	tensor_to_image(stylized_image).convert('L').save(file_name)
+	tensor_to_image(best_image).convert('L').save(file_name)
 
 
 def main():
 
-	args = parser.parse_args()
+	
 	print(args)
 	print(args.message)
 
@@ -263,11 +273,8 @@ def main():
 	elif args.loss == 1:
 		print("Neural style transfer with augmented style loss on image {}".format(image_path))
 
-	content_image = image_preprocessing(image_path, 'content', args.input_size, c=3)
-	style_image = image_preprocessing(image_path, 'style', args.input_size, c=3)
-	seg_image = image_preprocessing(image_path, 'segmentation', MAX_SIZE, c=3)		# Needed MAX_SIZE to preserve labels	
 
-	neural_style_transfer(content_image, style_image, seg_image, args)
+	neural_style_transfer(image_path, args)
 
 	return 0
 
