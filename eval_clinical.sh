@@ -13,9 +13,10 @@ machine=hoss
 project=nst-for-us-imaging
 env=tencu
 
-content=(18 18 18)
-style=(18 28 44)
-script=segmentation_mix.py
+content=(1 18 34)
+style=(000 000 000)
+script=clinical.py
+dict=us_clinical_ft_dict.pickle
 
 time=$(date +"%d-%m-%y_%T")
 
@@ -25,9 +26,10 @@ home_gpu=/scratch/${name}
 task_dir=${home_net}/${project}/nst
 image_dir=${home_net}/${project}/img
 save_dir=${home_net}/${project}/output/gpu_result/${time}
+models_dir=${home_net}/${project}/models/nst
 
 content_dir=${image_dir}/data/new_att_all
-style_dir=${image_dir}/data/new_att_all
+style_dir=${image_dir}/clinical_us/training_set
 
 sub_dir=${home_gpu}/submission/${time}
 
@@ -39,13 +41,14 @@ conda activate ${env}
 mkdir -p ${sub_dir}
 mkdir -p ${save_dir}/opt
 cp ${task_dir}/* ${sub_dir}/
+cp ${models_dir}/${dict} ${sub_dir}/
 
 for i in 0 1 2; do
 	content_file=${content[${i}]}.png
-	style_file=${style[${i}]}.png
+	style_file=${style[${i}]}_HC.png
 	cp ${content_dir}/${content_file} ${sub_dir}
 	cp ${style_dir}/${style_file} ${sub_dir}
-	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} "$@"
+	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} "$@"
 done
 
 rm -r ${sub_dir}

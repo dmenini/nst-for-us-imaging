@@ -1,8 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # or any {'0=all', '1=I', '2=IW' '3=IWE'}
-
+import re
 import tensorflow as tf
 import matplotlib as mpl
 import numpy as np
@@ -14,20 +13,25 @@ import argparse
 from PIL import Image
 from utils import *
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # or any {'0=all', '1=I', '2=IW' '3=IWE'}
 
 mpl.rcParams['figure.figsize'] = (12, 12)
 mpl.rcParams['axes.grid'] = False
 
 parser = argparse.ArgumentParser(description='Optimization parameters and files.')
-parser.add_argument('--data-dir', dest='data_dir',    type=str,     default='img/data/new_att_all',     help='Directory containing input images')
-parser.add_argument('--save-dir', dest='save_dir',    type=str,     default='output/result',            help='Directory where to store the results')
-parser.add_argument('--image',    dest='image',       type=int,     default=1,     						help='Input image number')
-parser.add_argument('--weights',  dest='weights',     type=float,   default=[1, 1e2, 0.1],  nargs='+',  help='Style and content weights')
-parser.add_argument('--epochs',   dest='epochs',      type=int,     default=300,                        help='Max number of epochs')
-parser.add_argument('--steps',    dest='steps',       type=int,     default=10,                         help='Number of steps per epoch')
-parser.add_argument('--size',     dest='input_size',  type=int,     default=1024,                       help='input size (max dim)')
-parser.add_argument('--loss',     dest='loss',  	  type=int,     default=1,     						help='0=StyleLoss, 1=StyleLoss+')
-parser.add_argument('--message',  dest='message',	  type=str,		default='',							help='Submission description')
+# Passed by script eval_mix.sh
+parser.add_argument('--data-dir', dest='data_dir',    type=str,     default='img/data/new_att_all',     	help='Directory containing input images')
+parser.add_argument('--save-dir', dest='save_dir',    type=str,     default='output/result',            	help='Directory where to store the results')
+parser.add_argument('--content',  dest='content',     type=str,     default='img/data/new_att_all/34.png',  help='Content image path')
+parser.add_argument('--style', 	  dest='style',       type=str,     default='img/data/new_att_all/44.png',  help='Style image path')
+parser.add_argument('--name', 	  dest='name',        type=str,     default='seg',            				help='Prefix of the saved image')
+parser.add_argument('--loss',     dest='loss',  	  type=int,     default=0,     							help='0=StyleLoss, 1=StyleLoss+')
+# Passed by user (or default)
+parser.add_argument('--weights',  dest='weights',     type=float,   default=[1e-1, 1e4, 0],    nargs='+', 	help='Style and content weights')
+parser.add_argument('--epochs',   dest='epochs',      type=int,     default=300,                        	help='Max number of epochs')
+parser.add_argument('--steps',    dest='steps',       type=int,     default=10,                         	help='Number of steps per epoch')
+parser.add_argument('--size',     dest='input_size',  type=int,     default=1386,                       	help='input size (max dim)')
+parser.add_argument('--message',  dest='message',	  type=str,		default='',								help='Submission description')
 
 # Style layer of interest
 style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
@@ -122,7 +126,7 @@ def extract_masks(seg_image, style_shape, c=1, visualize=False):
 		for l in mask_dict.keys():
 			tensor_to_image(tf.image.grayscale_to_rgb(mask_dict[l])).save('output/masks/' + str(args.image) + '_' + str(l) + '.png')
 
-	mask_dict = {label: mask_dict[label] for label in mask_dict.keys() if np.sum(mask_dict[label]) > w*h*c*0.0015}     # Filter out small masks
+	mask_dict = {label: mask_dict[label] for label in mask_dict.keys() if np.sum(mask_dict[label]) > w*h*c*0.01}     # Filter out small masks
 	mask_dict = {label: tf.image.resize(mask_dict[label], style_shape, method='nearest') for label in mask_dict.keys()}
 
 	return mask_dict
@@ -186,36 +190,53 @@ def total_variation_loss(output, tv_weight):
 	return tv_loss
 
 
-def neural_style_transfer(image_path, args):
+def scores(stylized_image, style_target):
+	mse_score = mse(stylized_image, style_target)
+	psnr_score = tf.image.psnr(stylized_image, style_target, max_val=1.0).numpy()[0]
+	ssim_score = tf.image.ssim(stylized_image, style_target, max_val=1.0).numpy()[0]
+	print("\tSCORE:\tMSE = {:.6f} \tPSNR = {:.6f} \tSSIM = {:.6f}".format(mse_score, psnr_score, ssim_score))
+
+
+def neural_style_transfer(args):
+
+	content_path = args.content
+	style_path = args.style
+
+	if args.loss == 0:
+		print("Neural style transfer with basic style loss. \nContent image = {}\nStyle image = {}".format(content_path, style_path))
+	elif args.loss == 1:
+		print("Neural style transfer with augmented style loss. \nContent image = {}\nStyle image = {}".format(content_path, style_path))
 
 	# ==================================================================================================================
 	# Extract style features, content features and masks
 	# ==================================================================================================================
 
-	style_image = image_preprocessing(image_path, 'style', args.input_size, c=3)
-	seg_image = image_preprocessing(image_path, 'segmentation', MAX_SIZE, c=3)		# Needed MAX_SIZE to preserve labels	
-	
+	seg_image = image_preprocessing(content_path, 'segmentation', [round(args.input_size/1.386), args.input_size], c=3)		# Needed MAX_SIZE to preserve labels	
+	style_target = image_preprocessing(content_path, 'style', [round(args.input_size/1.386), args.input_size], c=3)
+
+	style = image_preprocessing(style_path, 'style',[round(args.input_size/1.386), args.input_size], c=3)
+
 	# Extract binary masks as dict, then make a list
-	masks = extract_masks(seg_image, [style_image.shape[1], style_image.shape[2]], c=1, visualize=False)
+	masks = extract_masks(seg_image, [style.shape[1], style.shape[2]], c=1, visualize=False)
 	masks = [masks[label] for label in masks.keys()]
 	print("Number of masks: {}".format(len(masks)))
 
 	# Use segmentation image as content
-	content_image = tf.concat([masks[-2], masks[-2], masks[-3]], axis=-1)
+	content = seg_image
 
 	extractor = StyleContentModel(style_layers, content_layers)
-	style_features = extractor(style_image)['style']
-	content_features = extractor(content_image)['content']
+	style_features = extractor(style)['style']
+	content_features = extractor(content)['content']
 
 	# ==================================================================================================================
 	# Run gradient descent
 	# ==================================================================================================================
 
 	# Define a tf.Variable to contain the image to optimize
-	init_image = np.random.randn(1, content_image.shape[1], content_image.shape[2], content_image.shape[3]).astype(np.float32) * 0.0001
+	init_image = np.random.randn(1, content.shape[1], content.shape[2], content.shape[3]).astype(np.float32) * 0.0001
 	stylized_image = tf.Variable(init_image)
 
-	opt = tf.optimizers.Adam(learning_rate=0.02, beta_1=0.99, epsilon=1e-7)
+	opt = tf.optimizers.Adam(learning_rate=0.006, beta_1=0.99, epsilon=1e-7)
 
 	@tf.function()
 	def train_step(image, masks, style_features, content_features, weights):
@@ -241,11 +262,8 @@ def neural_style_transfer(image_path, args):
 		print("Epoch: {}".format(n))
 		for m in range(args.steps):
 			loss, loss_style, loss_content, loss_tv = train_step(stylized_image, masks, style_features, content_features, args.weights)
-		mse_score = mse(stylized_image, style_image)
-		psnr_score = tf.image.psnr(stylized_image, style_image, max_val=1.0).numpy()[0]
-		ssim_score = tf.image.ssim(stylized_image, style_image, max_val=1.0).numpy()[0]
 		print("\tLOSS:\tstyle = {:.2f} \tcontent = {:.2f} \ttv = {:.2f} \tTOT = {:.2f}".format(loss_style, loss_content, loss_tv, loss))
-		print("\tSCORE:\tMSE = {:.6f} \tPSNR = {:.6f} \tSSIM = {:.6f}".format(mse_score, psnr_score, ssim_score))
+		scores(stylized_image, style_target)
 		file_name = args.save_dir + '/opt/ep_' + str(n) + '.png'
 		if n % SAVE_INTERVAL == 0:
 			tensor_to_image(stylized_image).convert('L').save(file_name)
@@ -259,29 +277,24 @@ def neural_style_transfer(image_path, args):
 
 	best_image = tf.multiply(best_image, masks[-1])				# fg mask
 	best_image_object = tf.multiply(best_image, masks[-3])		# obj_full mask
-	mse_score = mse(best_image_object, style_image)
-	psnr_score = tf.image.psnr(best_image_object, style_image, max_val=1.0).numpy()[0]
-	ssim_score = tf.image.ssim(best_image_object, style_image, max_val=1.0).numpy()[0]
-	print("FINAL SCORE (object):\tMSE = {:.6f} \tPSNR = {:.6f} \tSSIM = {:.6f}".format(mse_score, psnr_score, ssim_score))
-	file_name = args.save_dir + '/seg' + str(args.image) + '_' + str(best_epoch) + '.png'
+	
+	print("FINAL SCORES (epoch {}):".format(best_epoch))
+	scores(best_image_object, style_target)
+	
+	image_number = [int(s) for s in re.split('[/ .]',content_path) if s.isdigit()][0]
+	file_name = args.save_dir + '/' + str(args.name) + str(image_number) + '_' + str(best_epoch) + '.png'
 	tensor_to_image(best_image).convert('L').save(file_name)
+
 
 
 def main():
 
-	
+	args = parser.parse_args()
+
 	print(args)
 	print(args.message)
 
-	image_path = args.data_dir + '/' + str(args.image) + '.png'
-
-	if args.loss == 0:
-		print("Neural style transfer with basic style loss on image {}".format(image_path))
-	elif args.loss == 1:
-		print("Neural style transfer with augmented style loss on image {}".format(image_path))
-
-
-	neural_style_transfer(image_path, args)
+	neural_style_transfer(args)
 
 	return 0
 

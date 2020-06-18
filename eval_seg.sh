@@ -13,7 +13,8 @@ machine=hoss
 project=nst-for-us-imaging
 env=tencu
 
-images=(1 18 34)
+content=(1 18 34)
+style=(11 28 44)
 script=segmentation_seg.py
 
 time=$(date +"%d-%m-%y_%T")
@@ -22,8 +23,11 @@ home_net=/scratch_net/${machine}/${name}
 home_gpu=/scratch/${name}
 
 task_dir=${home_net}/${project}/nst
-image_dir=${home_net}/${project}/img/data/new_att_all
+image_dir=${home_net}/${project}/img
 save_dir=${home_net}/${project}/output/gpu_result/${time}
+
+content_dir=${image_dir}/data/new_att_all
+style_dir=${image_dir}/data/new_att_all
 
 sub_dir=${home_gpu}/submission/${time}
 
@@ -36,9 +40,12 @@ mkdir -p ${sub_dir}
 mkdir -p ${save_dir}/opt
 cp ${task_dir}/* ${sub_dir}/
 
-for i in ${images[@]}; do
-cp ${image_dir}/${i}.png ${sub_dir}
-python -u ${sub_dir}/${script} --data-dir ${sub_dir} --save-dir ${save_dir} --image ${i} "$@"
+for i in 0 1 2; do
+	content_file=${content[${i}]}.png
+	style_file=${content[${i}]}.png
+	cp ${content_dir}/${content_file} ${sub_dir}
+	cp ${style_dir}/${style_file} ${sub_dir}
+	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --loss 0 --name old0_ "$@"
 done
 
 rm -r ${sub_dir}

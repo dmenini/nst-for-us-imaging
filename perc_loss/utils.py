@@ -12,7 +12,7 @@ def load_image(filename):
 
 # assumes data comes in batch form (ch, h, w)
 def save_image(filename, data, norm):
-    img = denormalize_tensor_transform(data, norm)
+    img = denormalize_imagenet(data, norm)
     img = Image.fromarray(img)
     img.save(filename)
     return img
@@ -26,7 +26,7 @@ def gram(x):
     return G
 
 # using ImageNet values
-def normalize_tensor_transform(norm):
+def normalize_imagenet(norm):
     if norm: 
         std = [0.229, 0.224, 0.225]
         mean = [0.485, 0.456, 0.406]
@@ -36,7 +36,7 @@ def normalize_tensor_transform(norm):
     return transforms.Normalize(mean=mean, std=std)
 
 
-def denormalize_tensor_transform(data, norm):
+def denormalize_imagenet(data, norm):
     if norm:
         std = np.array([0.229, 0.224, 0.225]).reshape((3, 1, 1))
         mean = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))

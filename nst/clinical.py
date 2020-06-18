@@ -2,6 +2,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 import re
+import pickle
 import tensorflow as tf
 import matplotlib as mpl
 import numpy as np
@@ -20,18 +21,18 @@ mpl.rcParams['axes.grid'] = False
 
 parser = argparse.ArgumentParser(description='Optimization parameters and files.')
 # Passed by script eval_mix.sh
-parser.add_argument('--data-dir', dest='data_dir',    type=str,     default='img/data/new_att_all',     	help='Directory containing input images')
-parser.add_argument('--save-dir', dest='save_dir',    type=str,     default='output/result',            	help='Directory where to store the results')
-parser.add_argument('--content',  dest='content',     type=str,     default='img/data/new_att_all/34.png',  help='Content image path')
-parser.add_argument('--style', 	  dest='style',       type=str,     default='img/data/new_att_all/11.png',  help='Style image path')
-parser.add_argument('--name', 	  dest='name',        type=str,     default='mix',            				help='Prefix of the saved image')
-parser.add_argument('--loss',     dest='loss',  	  type=int,     default=0,     							help='0=StyleLoss, 1=StyleLoss+')
+parser.add_argument('--save-dir', dest='save_dir',    type=str,     default='output/result',            				help='Directory where to store the results')
+parser.add_argument('--content',  dest='content',     type=str,     default='img/data/new_att_all/18.png',     			help='Content image path')
+parser.add_argument('--style', 	  dest='style',       type=str,     default='img/clinical_us/training_set/000_HC.png',  help='Style image path')
+parser.add_argument('--dict-path',dest='dict_path',   type=str,     default='models/nst/us_clinical_ft_dict.pickle',     	help='Path to the dict to be used as style target')
+parser.add_argument('--name', 	  dest='name',        type=str,     default='cli',            							help='Prefix of the saved image')
+parser.add_argument('--loss',     dest='loss',  	  type=int,     default=0,     										help='0=StyleLoss, 1=StyleLoss+, 2=AvgStyleLoss')
 # Passed by user (or default)
-parser.add_argument('--weights',  dest='weights',     type=float,   default=[1e-2, 1e5, 0],    nargs='+', 	help='Style and content weights')
-parser.add_argument('--epochs',   dest='epochs',      type=int,     default=300,                        	help='Max number of epochs')
-parser.add_argument('--steps',    dest='steps',       type=int,     default=10,                         	help='Number of steps per epoch')
-parser.add_argument('--size',     dest='input_size',  type=int,     default=1386,                       	help='input size (max dim)')
-parser.add_argument('--message',  dest='message',	  type=str,		default='',								help='Submission description')
+parser.add_argument('--weights',  dest='weights',     type=float,   default=[1e-2, 1e5, 0],  nargs='+', 				help='Style and content weights')
+parser.add_argument('--epochs',   dest='epochs',      type=int,     default=300,                        				help='Max number of epochs')
+parser.add_argument('--steps',    dest='steps',       type=int,     default=10,                         				help='Number of steps per epoch')
+parser.add_argument('--size',     dest='input_size',  type=int,     default=1386,                       				help='input size (max dim)')
+parser.add_argument('--message',  dest='message',	  type=str,		default='',											help='Submission description')
 
 # Style layer of interest
 style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
@@ -40,7 +41,7 @@ content_layers = ['block5_conv2']
 
 # Global variables
 MAX_SIZE = 1386
-SAVE_INTERVAL = 50
+SAVE_INTERVAL = 100
 
 
 def resize_mask(mask, names):
@@ -133,18 +134,18 @@ def extract_masks(seg_image, style_shape, c=1, visualize=False):
 
 
 def gram_matrix(input_tensor):
-    """ 
-    Calculate style by means of Gram Matrix, which include means and correlation across feature maps.
+	""" 
+	Calculate style by means of Gram Matrix, which include means and correlation across feature maps.
 	"""
-    result = tf.linalg.einsum('bijc,bijd->bcd', input_tensor, input_tensor)
-    input_shape = tf.shape(input_tensor)
-    num_locations = tf.cast(input_shape[1] * input_shape[2], tf.float32)
-    return result / (num_locations)
+	result = tf.linalg.einsum('bijc,bijd->bcd', input_tensor, input_tensor)
+	input_shape = tf.shape(input_tensor)
+	num_locations = tf.cast(input_shape[1] * input_shape[2], tf.float32)
+	return result / (num_locations)
 
 
 def style_augmented_loss(outputs, masks, style_features, style_weight):
 	""" 
-    Style loss augmented with semantic information from segmentation masks
+	Style loss augmented with semantic information from segmentation masks
 	"""
 	style_outputs = outputs['style']
 	num_style_layers = len(style_outputs)
@@ -168,6 +169,15 @@ def style_loss(outputs, style_features, style_weight):
 	style_outputs = outputs['style']
 	num_style_layers = len(style_outputs)
 	style_loss = tf.add_n([tf.reduce_mean((gram_matrix(style_outputs[name]) - gram_matrix(style_features[name])) ** 2)
+						   for name in style_outputs.keys()])
+	style_loss *= style_weight / num_style_layers
+	return style_loss
+
+
+def style_loss_avg(outputs, style_grams, style_weight):
+	style_outputs = outputs['style']
+	num_style_layers = len(style_outputs)
+	style_loss = tf.add_n([tf.reduce_mean((gram_matrix(style_outputs[name]) - style_grams[name]) ** 2)
 						   for name in style_outputs.keys()])
 	style_loss *= style_weight / num_style_layers
 	return style_loss
@@ -205,13 +215,14 @@ def neural_style_transfer(args):
 		print("Neural style transfer with basic style loss. \nContent image = {}\nStyle image = {}".format(content_path, style_path))
 	elif args.loss == 1:
 		print("Neural style transfer with augmented style loss. \nContent image = {}\nStyle image = {}".format(content_path, style_path))
+	elif args.loss == 2:
+		print("Neural style transfer with average style loss. \nContent image = {}\nStyle image = {}".format(content_path, style_path))
 
-	content = image_preprocessing(content_path, 'content', [round(args.input_size/1.386), args.input_size], c=3)
+	content = image_preprocessing(content_path, 'style', [round(args.input_size/1.386), args.input_size], c=3)
 	content_seg = image_preprocessing(content_path, 'segmentation', [round(args.input_size/1.386), args.input_size], c=3)	
-	style_target = image_preprocessing(content_path, 'style', [round(args.input_size/1.386), args.input_size], c=3)
- 
-	content = tf.concat([tf.expand_dims(content[:,:,:,0], axis=-1), tf.expand_dims(content[:,:,:,0], axis=-1), tf.expand_dims(content_seg[:,:,:,0], axis=-1)], axis=-1)
-	style = image_preprocessing(style_path, 'style', [round(args.input_size/1.386), args.input_size], c=3)
+	# style_target = image_preprocessing(content_path, 'style', [round(args.input_size/1.386), args.input_size], c=3)
+
+	style = image_preprocessing(style_path, 'clinical', [round(args.input_size/1.386), args.input_size], c=3)
 
 	# ==================================================================================================================
 	# Extract style features, content features and masks
@@ -226,6 +237,14 @@ def neural_style_transfer(args):
 	style_features = extractor(style)['style']
 	content_features = extractor(content)['content']
 
+	style_grams = {}
+	if args.loss == 2:
+		print('Loading dict from {}'.format(args.dict_path))
+		with open(args.dict_path, 'rb') as handle:
+			style_features = pickle.load(handle)
+	for name in style_features.keys():
+		print(style_features[name].shape)
+
 	# ==================================================================================================================
 	# Run gradient descent
 	# ==================================================================================================================
@@ -234,17 +253,19 @@ def neural_style_transfer(args):
 	init_image = np.random.randn(1, content.shape[1], content.shape[2], content.shape[3]).astype(np.float32) * 0.0001
 	stylized_image = tf.Variable(init_image)
 
-	opt = tf.optimizers.Adam(learning_rate=0.004, beta_1=0.99, epsilon=1e-7)
+	opt = tf.optimizers.Adam(learning_rate=0.006, beta_1=0.99, epsilon=1e-7)
 
 	@tf.function()
-	def train_step(image, masks, style_features, content_features, weights):
+	def train_step(image, masks, style_f, content_f, style_g, weights):
 		with tf.GradientTape() as tape:
 			outputs = extractor(image)
 			if args.loss == 0:
-				loss_style = style_loss(outputs, style_features, weights[0])
+				loss_style = style_loss(outputs, style_f, weights[0])
 			elif args.loss == 1:
-				loss_style = style_augmented_loss(outputs, masks, style_features, weights[0])
-			loss_content = content_loss(outputs, content_features, weights[1])
+				loss_style = style_augmented_loss(outputs, masks, style_f, weights[0])
+			elif args.loss == 2:
+				loss_style = style_loss(outputs, style_f, weights[0])
+			loss_content = content_loss(outputs, content_f, weights[1])
 			loss_tv = total_variation_loss(image, weights[2])
 			loss = loss_style + loss_content + loss_tv
 		grad = tape.gradient(loss, image)
@@ -259,9 +280,8 @@ def neural_style_transfer(args):
 	for n in range(args.epochs):
 		print("Epoch: {}".format(n))
 		for m in range(args.steps):
-			loss, loss_style, loss_content, loss_tv = train_step(stylized_image, masks, style_features, content_features, args.weights)
+			loss, loss_style, loss_content, loss_tv = train_step(stylized_image, masks, style_features, content_features, style_grams, args.weights)
 		print("\tLOSS:\tstyle = {:.2f} \tcontent = {:.2f} \ttv = {:.2f} \tTOT = {:.2f}".format(loss_style, loss_content, loss_tv, loss))
-		scores(stylized_image, style_target)
 		file_name = args.save_dir + '/opt/ep_' + str(n) + '.png'
 		if n % SAVE_INTERVAL == 0:
 			tensor_to_image(stylized_image).convert('L').save(file_name)
@@ -274,9 +294,6 @@ def neural_style_transfer(args):
 	print("Total time: {:.1f}\n".format(end - start))
 
 	best_image = tf.multiply(best_image, mask_dict['fg'])
-	print("FINAL SCORES (epoch {}):".format(best_epoch))
-	scores(best_image, style_target)
-
 	image_number = [int(s) for s in re.split('[/ .]',content_path) if s.isdigit()][0]
 	file_name = args.save_dir + '/' + str(args.name) + str(image_number) + '_' + str(best_epoch) + '.png'
 	tensor_to_image(best_image).convert('L').save(file_name)

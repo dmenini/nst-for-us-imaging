@@ -13,9 +13,9 @@ machine=hoss
 project=nst-for-us-imaging
 env=tencu
 
-content=(18 18 18)
-style=(18 28 44)
-script=segmentation_mix.py
+content=(18 34 1)
+style=(28 44 11)
+script=local_transfer.py
 
 time=$(date +"%d-%m-%y_%T")
 

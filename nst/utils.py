@@ -98,14 +98,17 @@ def scale_image(img, max_dim):
     shape = tf.cast(tf.shape(img)[:-1], tf.float32)
     long_dim = max(shape)
     scale = max_dim / long_dim
-
     new_shape = tf.cast(shape * scale, tf.int32)
+
     img = tf.image.resize(img, new_shape, method='nearest')
     img = img[tf.newaxis, :]
+
+    img = tf.image.resize(img, [round(max_dim/1.386), max_dim], method='nearest')
+
     return img
 
 
-def image_preprocessing(path_to_img, object, max_dim, c=3):
+def image_preprocessing(path_to_img, object, new_shape, c=3):
     """
     Read full image from file, decode as a tensor, value in range [0,1].
     Crop depending on the desired object.
@@ -122,9 +125,13 @@ def image_preprocessing(path_to_img, object, max_dim, c=3):
         img = tf.image.crop_to_bounding_box(img, 0, 0, h, round(w / 3))
     elif object == 'style':
         img = tf.image.crop_to_bounding_box(img, 0, round(w / 3), h, round(w / 3))
+    elif object == 'clinical':
+        img = tf.image.crop_to_bounding_box(img, 0, 20, h, w-20)
     else:
-        print("Object must be either 'segmentation', 'content' or 'style'")
+        print("Object must be either 'segmentation', 'content', 'style', 'clinical")
         return 1
 
-    img = scale_image(img, max_dim)
+    img = img[tf.newaxis, :]
+    img = tf.image.resize(img, new_shape, method='nearest')
+
     return img
