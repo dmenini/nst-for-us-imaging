@@ -12,11 +12,13 @@ name=dmenini
 machine=hoss
 project=nst-for-us-imaging
 env=tencu
+task=hq2clinical
 
-content=(1 18 34)
-style=(000 000 000)
-script=clinical.py
+content=(34)
+style=(000)
+script=nst.py
 dict=us_clinical_ft_dict.pickle
+lr=0.005
 
 time=$(date +"%d-%m-%y_%T")
 
@@ -43,12 +45,12 @@ mkdir -p ${save_dir}/opt
 cp ${task_dir}/* ${sub_dir}/
 cp ${models_dir}/${dict} ${sub_dir}/
 
-for i in 0 1 2; do
+for i in 0; do
 	content_file=${content[${i}]}.png
 	style_file=${style[${i}]}_HC.png
 	cp ${content_dir}/${content_file} ${sub_dir}
 	cp ${style_dir}/${style_file} ${sub_dir}
-	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --loss 2 --lr $lr --name cli2_ "$@"
 done
 
 rm -r ${sub_dir}

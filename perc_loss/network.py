@@ -1,5 +1,52 @@
 import torch
 import torch.nn as nn
+from math import sqrt
+
+
+class EqualLR:
+    def __init__(self, name):
+        self.name = name
+
+    def compute_weight(self, module):
+        weight = getattr(module, self.name + '_orig')
+        fan_in = weight.data.size(1) * weight.data[0][0].numel()
+
+        return weight * sqrt(2 / fan_in)
+
+    @staticmethod
+    def apply(module, name):
+        fn = EqualLR(name)
+
+        weight = getattr(module, name)
+        del module._parameters[name]
+        module.register_parameter(name + '_orig', nn.Parameter(weight.data))
+        module.register_forward_pre_hook(fn)
+
+        return fn
+
+    def __call__(self, module, input):
+        weight = self.compute_weight(module)
+        setattr(module, self.name, weight)
+
+
+def equal_lr(module, name='weight'):
+    EqualLR.apply(module, name)
+
+    return module
+
+
+# Noise Layer
+class NoiseInjection(nn.Module):
+    def __init__(self, out_channels):
+        super().__init__()
+
+        self.weight = nn.Parameter(torch.zeros(1, out_channels, 1, 1))
+
+    def forward(self, x):
+        noise = torch.randn(x.size()).cuda()
+        x = x + self.weight * noise
+        return x
+
 
 # Conv Layer
 class ConvLayer(nn.Module):
@@ -7,7 +54,7 @@ class ConvLayer(nn.Module):
         super(ConvLayer, self).__init__()
         padding = kernel_size // 2
         self.reflection_pad = nn.ReflectionPad2d(padding)
-        self.conv2d = nn.Conv2d(in_channels, out_channels, kernel_size, stride) #, padding)
+        self.conv2d = nn.Conv2d(in_channels, out_channels, kernel_size, stride)
 
     def forward(self, x):
         out = self.reflection_pad(x)
@@ -49,6 +96,67 @@ class ResidualBlock(nn.Module):
         out = out + residual
         out = self.relu(out)
         return out 
+
+# Image Transform Network
+class ImageTransformNet_noisy(nn.Module):
+    def __init__(self):
+        super(ImageTransformNet_noisy, self).__init__()
+        
+        # nonlineraity
+        self.relu = nn.ReLU()
+        self.tanh = nn.Tanh()
+
+        # encoding layers
+        self.conv1 = ConvLayer(3, 32, kernel_size=9, stride=1)
+        self.in1_e = nn.InstanceNorm2d(32, affine=True)
+
+        self.conv2 = ConvLayer(32, 64, kernel_size=3, stride=2)
+        self.in2_e = nn.InstanceNorm2d(64, affine=True)
+
+        self.conv3 = ConvLayer(64, 128, kernel_size=3, stride=2)
+        self.in3_e = nn.InstanceNorm2d(128, affine=True)
+
+        # residual layers
+        self.res1 = ResidualBlock(128)
+        self.res2 = ResidualBlock(128)
+        self.res3 = ResidualBlock(128)
+        self.res4 = ResidualBlock(128)
+        self.res5 = ResidualBlock(128)
+
+        # decoding layers
+        self.noise3 = NoiseInjection(128)
+        self.deconv3 = UpsampleConvLayer(128, 64, kernel_size=3, stride=1, upsample=2 )
+        self.in3_d = nn.InstanceNorm2d(64, affine=True)
+
+        self.noise2 = NoiseInjection(64)
+        self.deconv2 = UpsampleConvLayer(64, 32, kernel_size=3, stride=1, upsample=2 )
+        self.in2_d = nn.InstanceNorm2d(32, affine=True)
+
+        self.noise1 = NoiseInjection(32)
+        self.deconv1 = UpsampleConvLayer(32, 3, kernel_size=9, stride=1)
+        self.in1_d = nn.InstanceNorm2d(3, affine=True)
+
+    def forward(self, x):
+        # encode
+        y = self.relu(self.in1_e(self.conv1(x)))
+        y = self.relu(self.in2_e(self.conv2(y)))
+        y = self.relu(self.in3_e(self.conv3(y)))
+
+        # residual layers
+        y = self.res1(y)
+        y = self.res2(y)
+        y = self.res3(y)
+        y = self.res4(y)
+        y = self.res5(y)
+
+        # decode 
+        y = self.relu(self.in3_d(self.deconv3(self.noise3(y))))
+        y = self.relu(self.in2_d(self.deconv2(self.noise2(y))))
+        # y = self.tanh(self.in1_d(self.deconv1(y)))
+        y = self.deconv1(self.noise1(y))
+
+        return y
+
 
 # Image Transform Network
 class ImageTransformNet(nn.Module):
@@ -99,10 +207,10 @@ class ImageTransformNet(nn.Module):
         y = self.res4(y)
         y = self.res5(y)
 
-        # decode
+        # decode 
         y = self.relu(self.in3_d(self.deconv3(y)))
         y = self.relu(self.in2_d(self.deconv2(y)))
-        #y = self.tanh(self.in1_d(self.deconv1(y)))
+        # y = self.tanh(self.in1_d(self.deconv1(y)))
         y = self.deconv1(y)
 
         return y

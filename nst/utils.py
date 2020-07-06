@@ -83,10 +83,6 @@ def imgshow(image, c=3, title=None):
     plt.imshow(image, cmap='gray')
 
 
-def clip_0_1(image):
-    return tf.clip_by_value(image, clip_value_min=0.0, clip_value_max=1.0)
-
-
 def tf_load_image(path_to_image, c):
     img = tf.io.read_file(path_to_image)
     img = tf.image.decode_image(img, channels=c)
@@ -114,21 +110,20 @@ def image_preprocessing(path_to_img, object, new_shape, c=3):
     Crop depending on the desired object.
     Scale image to the max dimension allowed. 
     """
-
     img = tf_load_image(path_to_img, c)
 
     (h, w, c) = img.shape
 
     if object == 'segmentation':
         img = tf.image.crop_to_bounding_box(img, 0, round(2 * w / 3), h, round(w / 3))
-    elif object == 'content':
+    elif object == 'lq':
         img = tf.image.crop_to_bounding_box(img, 0, 0, h, round(w / 3))
-    elif object == 'style':
+    elif object == 'hq':
         img = tf.image.crop_to_bounding_box(img, 0, round(w / 3), h, round(w / 3))
     elif object == 'clinical':
         img = tf.image.crop_to_bounding_box(img, 0, 20, h, w-20)
     else:
-        print("Object must be either 'segmentation', 'content', 'style', 'clinical")
+        print("Object must be either 'segmentation', 'lq', 'hq', 'clinical")
         return 1
 
     img = img[tf.newaxis, :]

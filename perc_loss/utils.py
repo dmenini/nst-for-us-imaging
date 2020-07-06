@@ -13,7 +13,7 @@ def load_image(filename):
 # assumes data comes in batch form (ch, h, w)
 def save_image(filename, data, norm):
     img = denormalize_imagenet(data, norm)
-    img = Image.fromarray(img)
+    img = Image.fromarray(img).convert('L')
     img.save(filename)
     return img
 

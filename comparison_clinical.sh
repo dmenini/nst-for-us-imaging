@@ -12,10 +12,11 @@ name=dmenini
 machine=hoss
 project=nst-for-us-imaging
 env=tencu
+task=hq2clinical
 
-content=(1 18 34)
-style=(000 000 000)
-script=clinical.py
+content=(34)
+style=(000)
+script=nst.py
 dict=us_clinical_dict.pickle
 
 time=$(date +"%d-%m-%y_%T")
@@ -48,27 +49,12 @@ for i in 0 1 2; do
 	style_file=${style[${i}]}_HC.png
 	cp ${content_dir}/${content_file} ${sub_dir}
 	cp ${style_dir}/${style_file} ${sub_dir}
-	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --loss 0 --name cli0_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 0 --name mix0_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 1 --name mix1_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 2 --name mix2_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 0 --name old0_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 1 --name old1_ "$@"
 done
-
-for i in 0 1 2; do
-	content_file=${content[${i}]}.png
-	style_file=${style[${i}]}_HC.png
-	cp ${content_dir}/${content_file} ${sub_dir}
-	cp ${style_dir}/${style_file} ${sub_dir}
-	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --loss 1 --name cli1_ "$@"
 done
-
-for i in 0 1 2; do
-	content_file=${content[${i}]}.png
-	style_file=${style[${i}]}_HC.png
-	cp ${content_dir}/${content_file} ${sub_dir}
-	cp ${style_dir}/${style_file} ${sub_dir}
-	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --loss 2 --name cli2_ "$@"
-done
-
-
-
-
 
 rm -r ${sub_dir}

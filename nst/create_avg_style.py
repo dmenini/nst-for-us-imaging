@@ -6,8 +6,8 @@ import utils
 
 from PIL import Image
 
-clinical = 1
-N_IMG = 800
+clinical = 0
+N_IMG = 600
 
 style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
 content_layers = ['block5_conv2']
@@ -26,7 +26,7 @@ def main():
 			style_image = utils.image_preprocessing(image_path, 'clinical', [540, 800], c=3)
 		else:
 			image_path = 'img/data/new_att_all/' + str(i) + '.png'
-			style_image = utils.image_preprocessing(image_path, 'style', [1000, 1386], c=3)
+			style_image = utils.image_preprocessing(image_path, 'hq', [1000, 1386], c=3)
 
 		print(image_path)
 
@@ -47,7 +47,7 @@ def main():
 	if clinical:
 		filename = 'models/nst/us_clinical_ft_dict.pickle'
 	else:
-		filename = 'models/nst/us_style_dict.pickle'
+		filename = 'models/nst/us_hq_ft_dict.pickle'
 	with open(filename, 'wb') as handle:
 		pickle.dump(style_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 

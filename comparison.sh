@@ -12,10 +12,13 @@ name=dmenini
 machine=hoss
 project=nst-for-us-imaging
 env=tencu
+task=lq2hq
 
-content=(1)
-style=(11)
-script=segmentation_seg.py
+content=(34)
+style=(44)
+script=nst.py
+dict=us_hq_ft_dict.pickle
+lr=0.001
 
 time=$(date +"%d-%m-%y_%T")
 
@@ -25,6 +28,7 @@ home_gpu=/scratch/${name}
 task_dir=${home_net}/${project}/nst
 image_dir=${home_net}/${project}/img
 save_dir=${home_net}/${project}/output/gpu_result/${time}
+models_dir=${home_net}/${project}/models/nst
 
 content_dir=${image_dir}/data/new_att_all
 style_dir=${image_dir}/data/new_att_all
@@ -39,15 +43,18 @@ conda activate ${env}
 mkdir -p ${sub_dir}
 mkdir -p ${save_dir}/opt
 cp ${task_dir}/* ${sub_dir}/
+cp ${models_dir}/${dict} ${sub_dir}/
 
-for i in 0 1 2; do
+for i in 0; do
 	content_file=${content[${i}]}.png
 	style_file=${style[${i}]}.png
 	cp ${content_dir}/${content_file} ${sub_dir}
 	cp ${style_dir}/${style_file} ${sub_dir}
-	# python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --loss 0 --name mix0_ "$@"
-	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --loss 1 --name old1_ "$@"
-	# python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --loss 0 --name old0_ "$@"
-	# python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --loss 1 --name mix1_ "$@"
-
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 0 --name mix0_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 1 --name mix1_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 2 --name mix2_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 0 --name old0_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 1 --name old1_ "$@"
 done
+
+rm -r ${sub_dir}

@@ -8,6 +8,8 @@
 #$ -l gpu=1
 #$ -r y
 
+task=lq2hq
+
 name=dmenini
 machine=hoss
 project=nst-for-us-imaging
@@ -23,14 +25,25 @@ home_gpu=/scratch/${name}
 task_dir=${home_net}/${project}/perc_loss
 save_dir=${home_net}/${project}/output/gpu_result/${time}
 
-dataset_dir=${home_net}/${project}/img/seg_dataset
-content=1.png
-
-# style_dir=${home_net}/${project}/img/clinical_us/training_set
-# style=000_HC.png
-
-style_dir=${home_net}/${project}/img/style_dataset/new_att_all
-style=18.png
+if [ ${task} = 'lq2hq' ]; then
+	echo lq2hq
+	dataset_dir=${home_net}/${project}/img/lq_dataset
+	test_dir=${home_net}/${project}/img/lq_test/1.png
+	style_dir=${home_net}/${project}/img/hq_dataset/new_att_all
+	style=645.png
+elif [ ${task} = 'seg2hq' ]; then
+	echo seg2hq
+	dataset_dir=${home_net}/${project}/img/seg_dataset
+	test_dir=${home_net}/${project}/img/seg_test/1.png
+	style_dir=${home_net}/${project}/img/hq_dataset/new_att_all
+	style=645.png
+elif [ ${task} = 'hq2clinical' ]; then
+	echo hq2clinical
+	dataset_dir=${home_net}/${project}/img/hq_dataset
+	test_dir=${home_net}/${project}/img/hq_test/1.png
+	style_dir=${home_net}/${project}/img/clinical_us/training_set
+	style=000_HC.png
+fi	
 
 sub_dir=${home_gpu}/submission/${time}
 
@@ -45,6 +58,6 @@ cp -r ${task_dir}/* ${sub_dir}/
 cp ${dataset_dir}/new_att_all/* ${sub_dir}/img/new_att_all/
 cp ${style_dir}/${style} ${sub_dir}/
 echo cp ${style_dir}/${style} ${sub_dir}/
-python -u ${sub_dir}/${script} --dataset ${sub_dir}/img --save-dir ${save_dir} --style ${sub_dir}/${style} --content ${sub_dir}/img/new_att_all/${content} --gpu 1 "$@"
+python -u ${sub_dir}/${script} --dataset ${sub_dir}/img --save-dir ${save_dir} --style ${sub_dir}/${style} --content ${test_dir} --gpu 1 "$@"
 
 rm -r ${sub_dir}

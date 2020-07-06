@@ -25,10 +25,10 @@ parser.add_argument('--save-dir', dest='save_dir',    type=str,     default='out
 parser.add_argument('--content',  dest='content',     type=str,     default='img/data/new_att_all/34.png',  help='Content image path')
 parser.add_argument('--style', 	  dest='style',       type=str,     default='img/data/new_att_all/11.png',  help='Style image path')
 parser.add_argument('--name', 	  dest='name',        type=str,     default='loc',            				help='Prefix of the saved image')
-parser.add_argument('--loss',     dest='loss',  	  type=int,     default=0,     							help='0=StyleLoss, 1=StyleLoss+')
+parser.add_argument('--lr',       dest='lr',  	  	  type=float,   default=0.005,     						help='Learning rate')
 # Passed by user (or default)
 parser.add_argument('--weights',  dest='weights',     type=float,   default=[1e-2, 1e5, 0],    nargs='+', 	help='Style and content weights')
-parser.add_argument('--epochs',   dest='epochs',      type=int,     default=300,                        	help='Max number of epochs')
+parser.add_argument('--epochs',   dest='epochs',      type=int,     default=150,                        	help='Max number of epochs')
 parser.add_argument('--steps',    dest='steps',       type=int,     default=10,                         	help='Number of steps per epoch')
 parser.add_argument('--size',     dest='input_size',  type=int,     default=1386,                       	help='input size (max dim)')
 parser.add_argument('--message',  dest='message',	  type=str,		default='',								help='Submission description')
@@ -39,7 +39,6 @@ style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 
 content_layers = ['block5_conv2']
 
 # Global variables
-MAX_SIZE = 1386
 SAVE_INTERVAL = 50
 
 
@@ -111,12 +110,6 @@ def extract_masks(seg_image, style_shape, c=1, visualize=False):
 	masks = [image_to_tensor((np.array(seg_image) == label).astype(np.float32), c=c) for label in labels]
 	mask_dict = {label: mask for mask, label in zip(masks, labels)}
 
-	# mask0 = image_to_tensor((np.array(seg_image) > 59).astype(np.float32), c=c)
-	# mask1 = image_to_tensor((np.array(seg_image) > 218).astype(np.float32), c=c)
-	# mask_dict.update({'obj_full': (mask0 - mask1)})
-	# mask0 = image_to_tensor((np.array(seg_image) > 200).astype(np.float32), c=c)
-	# mask1 = image_to_tensor((np.array(seg_image) > 220).astype(np.float32), c=c)
-	# mask_dict.update({'obj': (mask0 - mask1)})
 	mask_fg = image_to_tensor((np.array(seg_image) >= 18).astype(np.float32), c=c)
 	mask_dict.update({'fg': mask_fg})
 
@@ -188,13 +181,6 @@ def content_loss(outputs, content_features, content_weight):
 	return content_loss
 
 
-def total_variation_loss(output, tv_weight):
-	shape = output.get_shape()
-	x_deltas = tf.abs(output[:, :, :-1, :] - output[:, :, 1:, :])
-	y_deltas = tf.abs(output[:, :-1, :, :] - output[:, 1:, :, :])
-	tv_loss = (tf.reduce_sum(x_deltas) + tf.reduce_sum(y_deltas)) * tv_weight
-	return tv_loss
-
 def scores(stylized_image, style_target):
 	mse_score = mse(stylized_image, style_target)
 	psnr_score = tf.image.psnr(stylized_image, style_target, max_val=1.0).numpy()[0]
@@ -207,14 +193,13 @@ def neural_style_transfer(args):
 	content_path = args.content
 	style_path = args.style
 
-	if args.loss == 0:
-		print("Neural style transfer with basic style loss. \nContent image = {}\nStyle image = {}".format(content_path, style_path))
+	print("Local style transfer with basic style loss. \nContent image = {}\nStyle image = {}".format(content_path, style_path))
 
-	content = image_preprocessing(content_path, 'content', [round(args.input_size/1.386), args.input_size], c=3)
+	content = image_preprocessing(content_path, 'lq', [round(args.input_size/1.386), args.input_size], c=3)
 	content_seg = image_preprocessing(content_path, 'segmentation', [round(args.input_size/1.386), args.input_size], c=3)	
-	style_target = image_preprocessing(content_path, 'style', [round(args.input_size/1.386), args.input_size], c=3)
+	style_target = image_preprocessing(content_path, 'hq', [round(args.input_size/1.386), args.input_size], c=3)
  
-	style = image_preprocessing(style_path, 'style', [round(args.input_size/1.386), args.input_size], c=3)
+	style = image_preprocessing(style_path, 'hq', [round(args.input_size/1.386), args.input_size], c=3)
 
 	# ==================================================================================================================
 	# Extract style features, content features and masks
@@ -238,7 +223,7 @@ def neural_style_transfer(args):
 	# Define a tf.Variable to contain the image to optimize
 	init_image = np.random.randn(1, content.shape[1], content.shape[2], content.shape[3]).astype(np.float32) * 0.0001
 
-	opt = tf.optimizers.Adam(learning_rate=0.004, beta_1=0.99, epsilon=1e-7)
+	opt = tf.optimizers.Adam(learning_rate=args.lr, beta_1=0.99, epsilon=1e-7)
 
 	@tf.function()
 	def train_step(image, style_features, content_features, weights):
@@ -249,7 +234,7 @@ def neural_style_transfer(args):
 			loss = loss_style + loss_content
 		grad = tape.gradient(loss, image)
 		opt.apply_gradients([(grad, image)])
-		image.assign(clip_0_1(image))
+		image.assign(tf.clip_by_value(image, clip_value_min=0.0, clip_value_max=1.0))
 		return loss, loss_style, loss_content
 
 	start = time.time()
