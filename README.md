@@ -2,11 +2,11 @@
 
 ## Repository tree
 
-img/ ---- input images, datasets, etc...
-output/ ---- gpu or cpu outputs
-models/ ---- output models from the perceptual loss network (.model), dictionaries of the average styles (.pickle)
-nst/ ---- neural style transfer with optimization approach, in tensorflow
-perc_loss/ ---- neural style transfer with learning approach, in pytorch
+- img/ ---- input images, datasets, etc...
+- output/ ---- gpu or cpu outputs
+- models/ ---- output models from the perceptual loss network (.model), dictionaries of the average styles (.pickle)
+- nst/ ---- neural style transfer with optimization approach, in tensorflow
+- perc_loss/ ---- neural style transfer with learning approach, in pytorch
 
 
 ## Setup
@@ -25,7 +25,7 @@ This operation is performed by build_datasets.py.
 
 ## Execution
 
-# Optimization approach
+### Optimization approach
 
 In order to run this approach, an environment with Tensorflow 2.1 must be activated.
 
@@ -56,7 +56,7 @@ The script eval_local allows to run local_nst.py, which performs local style tra
 
 The average style, in order to be used, has to be created first. This can be done with create_avg_style.py. 
 
-# Learning approach
+### Learning approach
 
 In order to run this approach, an environment with Pytorch must be activated.
 

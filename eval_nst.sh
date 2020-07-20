@@ -12,6 +12,7 @@ name=dmenini
 machine=hoss
 project=nst-for-us-imaging
 env=tencu
+
 task=lq2hq
 
 content=(34)
@@ -64,7 +65,6 @@ mkdir -p ${sub_dir}
 mkdir -p ${save_dir}/opt
 cp ${task_dir}/* ${sub_dir}/
 cp ${models_dir}/${dict} ${sub_dir}/
-
 
 END=$((${#content[@]} - 1))
 for i in $(seq 0 $END); do
