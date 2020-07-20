@@ -53,8 +53,8 @@ for i in 0; do
 	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 0 --name mix0_ "$@"
 	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 1 --name mix1_ "$@"
 	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 2 --name mix2_ "$@"
-	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 0 --name old0_ "$@"
-	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 1 --name old1_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 0 --name pair0_ "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${content_file} --dict-path ${sub_dir}/${dict} --lr $lr --loss 1 --name pair1_ "$@"
 done
 
 rm -r ${sub_dir}

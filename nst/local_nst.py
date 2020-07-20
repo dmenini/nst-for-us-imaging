@@ -141,28 +141,6 @@ def gram_matrix(input_tensor):
     return result / (num_locations)
 
 
-def style_augmented_loss(outputs, masks, style_features, style_weight):
-	""" 
-    Style loss augmented with semantic information from segmentation masks
-	"""
-	style_outputs = outputs['style']
-	num_style_layers = len(style_outputs)
-	
-	layer_style_loss = [0.0] * num_style_layers
-
-	for mask in masks:
-		layer_mask = resize_mask(mask, style_layers)
-		for i, name in enumerate(style_outputs.keys()):
-			gm_outputs = gram_matrix(tf.multiply(style_outputs[name], layer_mask[name]))
-			gm_features = gram_matrix(tf.multiply(style_features[name], layer_mask[name]))
-
-			layer_style_loss[i] += tf.reduce_mean((gm_outputs - gm_features) ** 2)
-
-	style_loss = tf.add_n(layer_style_loss) * style_weight / num_style_layers
-
-	return style_loss
-
-
 def style_loss(outputs, style_features, style_weight):
 	style_outputs = outputs['style']
 	num_style_layers = len(style_outputs)

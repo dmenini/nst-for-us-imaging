@@ -17,7 +17,7 @@ def main():
 	# load vgg network
 	extractor = utils.StyleContentModel(style_layers, content_layers)
 
-	style_features_avg = [0.0, 0.0, 0.0, 0.0, 0.0]
+	style_features_avg = [0.0] * len(style_layers)
 
 	for i in range(1,N_IMG):
 
@@ -30,15 +30,11 @@ def main():
 
 		print(image_path)
 
-		# calculate gram matrices for style feature layer maps we care about
 		style_features = extractor(style_image)['style']
 		style_features_list = [style_features[name]  for name in style_features.keys()]
 
-		# style_gram = [gram_matrix(style_features[name]) for name in style_features.keys()]
-
 		for j in range(5):
 			style_features_avg[j] += style_features_list[j]
-			# style_grams[j] += style_gram[j]
 
 	style_features_avg = [ft/(N_IMG - 1) for ft in style_features_avg]
 
@@ -50,16 +46,6 @@ def main():
 		filename = 'models/nst/us_hq_ft_dict.pickle'
 	with open(filename, 'wb') as handle:
 		pickle.dump(style_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-def gram_matrix(input_tensor):
-	""" 
-	Calculate style by means of Gram Matrix, which include means and correlation across feature maps.
-	"""
-	result = tf.linalg.einsum('bijc,bijd->bcd', input_tensor, input_tensor)
-	input_shape = tf.shape(input_tensor)
-	num_locations = tf.cast(input_shape[1] * input_shape[2], tf.float32)
-	return result / (num_locations)
 
 
 if __name__ == "__main__":

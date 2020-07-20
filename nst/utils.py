@@ -20,8 +20,7 @@ class StyleContentModel(tf.keras.models.Model):
     def call(self, inputs):
         """Expects float input in [0,1]"""
         inputs = inputs * 255.0
-        inputs = tf.keras.applications.vgg19.preprocess_input(inputs) 	# Subtract VGG_MEAN [103.939, 116.779, 123.68] to the channels, RGB->BGR. Not needed because inputs are BW.
-        # inputs = inputs - 116.779
+        inputs = tf.keras.applications.vgg19.preprocess_input(inputs)
         outputs = self.vgg(inputs)
         style_outputs, content_outputs = (outputs[:self.num_style_layers],
                                           outputs[self.num_style_layers:])

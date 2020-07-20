@@ -14,10 +14,9 @@ project=nst-for-us-imaging
 env=tencu
 task=lq2hq
 
-content=(34 645)
-style=(645 645)
+content=(34)
+style=(1)
 script=nst.py
-dict=us_hq_ft_dict.pickle
 
 time=$(date +"%d-%m-%y_%T")
 
@@ -29,8 +28,30 @@ image_dir=${home_net}/${project}/img
 save_dir=${home_net}/${project}/output/gpu_result/${time}
 models_dir=${home_net}/${project}/models/nst
 
-content_dir=${image_dir}/data/new_att_all
-style_dir=${image_dir}/data/new_att_all
+if [ ${task} = 'lq2hq' ]; then
+	echo $task
+	content_dir=${image_dir}/data/new_att_all
+	style_dir=${image_dir}/data/new_att_all
+	dict=us_hq_ft_dict.pickle
+	suf_content=.png
+	suf_style=.png
+
+elif [ ${task} = 'seg2hq' ]; then
+	echo $task
+	content_dir=${image_dir}/data/new_att_all
+	style_dir=${image_dir}/data/new_att_all
+	dict=us_hq_ft_dict.pickle
+	suf_content=.png
+	suf_style=.png
+
+elif [ ${task} = 'hq2clinical' ]; then
+	echo $task
+	content_dir=${image_dir}/data/new_att_all
+	style_dir=${image_dir}/clinical_us/training_set
+	dict=us_clinical_ft_dict.pickle
+	suf_content=.png
+	suf_style=_HC.png
+fi
 
 sub_dir=${home_gpu}/submission/${time}
 
@@ -44,12 +65,14 @@ mkdir -p ${save_dir}/opt
 cp ${task_dir}/* ${sub_dir}/
 cp ${models_dir}/${dict} ${sub_dir}/
 
-for i in 0; do
-	content_file=${content[${i}]}.png
-	style_file=${style[${i}]}.png
+
+END=$((${#content[@]} - 1))
+for i in $(seq 0 $END); do
+	content_file=${content[${i}]}${suf_content}
+	style_file=${style[${i}]}${suf_style}
 	cp ${content_dir}/${content_file} ${sub_dir}
 	cp ${style_dir}/${style_file} ${sub_dir}
-	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} --loss 1 "$@"
+	python -u ${sub_dir}/${script} --task ${task} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --dict-path ${sub_dir}/${dict} "$@"
 done
 
 rm -r ${sub_dir}

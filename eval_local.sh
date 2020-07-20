@@ -16,7 +16,6 @@ env=tencu
 content=(34)
 style=(645)
 script=local_transfer.py
-lr=0.005
 
 time=$(date +"%d-%m-%y_%T")
 
@@ -41,12 +40,13 @@ mkdir -p ${sub_dir}
 mkdir -p ${save_dir}/opt
 cp ${task_dir}/* ${sub_dir}/
 
-for i in 0; do
+END=$((${#content[@]} - 1))
+for i in $(seq 0 $END); do
 	content_file=${content[${i}]}.png
 	style_file=${style[${i}]}.png
 	cp ${content_dir}/${content_file} ${sub_dir}
 	cp ${style_dir}/${style_file} ${sub_dir}
-	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} --lr $lr "$@"
+	python -u ${sub_dir}/${script} --save-dir ${save_dir} --content ${sub_dir}/${content_file} --style ${sub_dir}/${style_file} "$@"
 done
 
 rm -r ${sub_dir}

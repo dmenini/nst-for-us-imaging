@@ -43,7 +43,6 @@ for i in range(0,MAX_IMG):
 
     style_feature = vgg(style)
     style_feature = [fmap for fmap in style_feature]
-    # style_gram = [utils.gram(fmap) for fmap in style_feature]
 
     for j in range(len(style_layers)):
         style_features[j] += style_feature[j]
@@ -53,6 +52,10 @@ style_features = [fmap / 100 for fmap in style_features]
 for j in range(len(style_layers)):
     style_dict = {name: value for name, value in zip(style_layers, style_features)}
 
-with open('models/perceptual/us_clinical_ft_dict.pickle', 'wb') as handle:
-    pickle.dump(style_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+if clinical:
+    with open('models/perceptual/us_clinical_ft_dict.pickle', 'wb') as handle:
+        pickle.dump(style_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+else:
+    with open('models/perceptual/us_hq_ft_dict.pickle', 'wb') as handle:
+        pickle.dump(style_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)   
 

@@ -28,10 +28,10 @@ parser.add_argument('--style', 	  dest='style',       type=str,     default='img
 parser.add_argument('--dict-path',dest='dict_path',   type=str,     default='models/nst/us_hq_ft_dict.pickle',  help='Path to the dict to be used as style target')
 parser.add_argument('--task', 	  dest='task',        type=str,     default='lq2hq',            				help='Task')
 parser.add_argument('--name', 	  dest='name',        type=str,     default='',            						help='Prefix of the output image')
-parser.add_argument('--loss',     dest='loss',  	  type=int,     default=0,     								help='0=StyleLoss, 1=StyleLoss+')
-parser.add_argument('--lr',       dest='lr',  	  	  type=float,   default=0.005,     							help='Learning rate')
+parser.add_argument('--loss',     dest='loss',  	  type=int,     default=0,     								help='0=StyleLoss, 1=StyleLoss+, 2=AverageStyle')
 # Passed by user (or default)
-parser.add_argument('--weights',  dest='weights',     type=float,   default=[1e-2, 1e5, 0],    nargs='+', 		help='Style and content weights')
+parser.add_argument('--lr',       dest='lr',  	  	  type=float,   default=0.005,     							help='Learning rate')
+parser.add_argument('--weights',  dest='weights',     type=float,   default=[1e-2, 1e5],   	 nargs='+', 		help='Style and content weights')
 parser.add_argument('--epochs',   dest='epochs',      type=int,     default=300,                        		help='Max number of epochs')
 parser.add_argument('--steps',    dest='steps',       type=int,     default=10,                         		help='Number of steps per epoch')
 parser.add_argument('--size',     dest='input_size',  type=int,     default=1386,                       		help='input size (max dim)')
@@ -109,7 +109,7 @@ def extract_masks(seg_image, style_shape, c=1, visualize=False):
 			labels.append(pixel)
 	labels = sorted(labels)
 
-	labels = [int(value) for value in labels if 150 <= value <= 220]
+	labels = [int(value) for value in labels if 100 <= value <= 220]
 	masks = [image_to_tensor((np.array(seg_image) == label).astype(np.float32), c=c) for label in labels]
 	mask_dict = {label: mask for mask, label in zip(masks, labels)}
 
@@ -134,6 +134,18 @@ def extract_masks(seg_image, style_shape, c=1, visualize=False):
 	return mask_dict
 
 
+def truncate_masks(style_masks, content_masks):
+	"""
+	Truncate style and content masks to common labels only.
+	"""
+	common_labels = [label for label in content_masks.keys() if label in style_masks.keys()]
+	print("Common labels: ", common_labels)
+	style_masks = 	[style_masks[label]	for label in style_masks.keys() if label in common_labels]
+	content_masks = [content_masks[label] for label in content_masks.keys() if label in common_labels]
+
+	return style_masks, content_masks
+
+
 def gram_matrix(input_tensor):
 	result = tf.linalg.einsum('bijc,bijd->bcd', input_tensor, input_tensor)
 	input_shape = tf.shape(input_tensor)
@@ -141,17 +153,21 @@ def gram_matrix(input_tensor):
 	return result / (num_locations)
 
 
-def style_augmented_loss(outputs, masks, style_features, style_weight):
+def style_augmented_loss(outputs, masks_content, masks_style, style_features, style_weight):
+	"""
+	Style loss augmented with semantic information from style and content masks.
+	"""
 	style_outputs = outputs['style']
 	num_style_layers = len(style_outputs)
 	
 	layer_style_loss = [0.0] * num_style_layers
 
-	for mask in masks:
-		layer_mask = resize_mask(mask, style_layers)
+	for mask_content, mask_style in zip(masks_content, masks_style):
+		layer_mask_content = resize_mask(mask_content, style_layers)
+		layer_mask_style = resize_mask(mask_style, style_layers)
 		for i, name in enumerate(style_outputs.keys()):
-			gm_outputs = gram_matrix(tf.multiply(style_outputs[name], layer_mask[name]))
-			gm_features = gram_matrix(tf.multiply(style_features[name], layer_mask[name]))
+			gm_outputs = gram_matrix(tf.multiply(style_outputs[name], layer_mask_content[name]))
+			gm_features = gram_matrix(tf.multiply(style_features[name], layer_mask_style[name]))
 
 			layer_style_loss[i] += tf.reduce_mean((gm_outputs - gm_features) ** 2)
 
@@ -205,15 +221,21 @@ def neural_style_transfer(args):
 		content_seg = image_preprocessing(content_path, 'segmentation', [round(args.input_size/1.386), args.input_size], c=3)	
 		style_target = image_preprocessing(content_path, 'hq', [round(args.input_size/1.386), args.input_size], c=3)
 		style = image_preprocessing(style_path, 'hq', [round(args.input_size/1.386), args.input_size], c=3)
+		style_seg = image_preprocessing(style_path, 'segmentation', [round(args.input_size/1.386), args.input_size], c=3)
+
 	elif args.task == 'seg2hq':
 		content = image_preprocessing(content_path, 'segmentation', [round(args.input_size/1.386), args.input_size], c=3)
 		content_seg = content
 		style_target = image_preprocessing(content_path, 'hq', [round(args.input_size/1.386), args.input_size], c=3)
 		style = image_preprocessing(style_path, 'hq', [round(args.input_size/1.386), args.input_size], c=3)
+		style_seg = image_preprocessing(style_path, 'segmentation', [round(args.input_size/1.386), args.input_size], c=3)
+
 	elif args.task == 'hq2clinical':
 		content = image_preprocessing(content_path, 'hq', [round(args.input_size/1.386), args.input_size], c=3)
 		content_seg = image_preprocessing(content_path, 'segmentation', [round(args.input_size/1.386), args.input_size], c=3)	
 		style = image_preprocessing(style_path, 'clinical', [round(args.input_size/1.386), args.input_size], c=3)
+		style_seg = content_seg			# Not correct eventually, but works...
+
 	else:
 		print("Wrong task")
 		return 0
@@ -222,10 +244,13 @@ def neural_style_transfer(args):
 	# Extract style features, content features and masks
 	# ==================================================================================================================
 
-	mask_dict = extract_masks(content_seg, [style.shape[1], style.shape[2]], c=1, visualize=False)
-	print("Number of content masks: {}".format(len(mask_dict)))
+	mask_dict_content = extract_masks(content_seg, [style.shape[1], style.shape[2]], c=1, visualize=False)
+	print("Number of content masks: {}".format(len(mask_dict_content)))
 
-	masks = [mask_dict[label] for label in mask_dict.keys()]
+	mask_dict_style = extract_masks(style_seg, [style.shape[1], style.shape[2]], c=1, visualize=False)
+	print("Number of style masks: {}".format(len(mask_dict_style)))
+
+	style_masks, content_masks = truncate_masks(mask_dict_style, mask_dict_content)
 
 	extractor = StyleContentModel(style_layers, content_layers)
 	style_features = extractor(style)['style']
@@ -247,14 +272,14 @@ def neural_style_transfer(args):
 	opt = tf.optimizers.Adam(learning_rate=args.lr, beta_1=0.99, epsilon=1e-7)
 
 	@tf.function()
-	def train_step(image, masks, style_features, content_features, weights):
-		image.assign(tf.multiply(image, mask_dict['fg']))
+	def train_step(image, masks_content, masks_style, style_features, content_features, weights):
+		image.assign(tf.multiply(image, mask_dict_content['fg']))
 		with tf.GradientTape() as tape:
 			outputs = extractor(image)
 			if args.loss == 0 or args.loss == 2:
 				loss_style = style_loss(outputs, style_features, weights[0])
 			elif args.loss == 1:
-				loss_style = style_augmented_loss(outputs, masks, style_features, weights[0])
+				loss_style = style_augmented_loss(outputs, masks_content, masks_style, style_features, weights[0])
 			loss_content = content_loss(outputs, content_features, weights[1])
 			loss = loss_style + loss_content
 		grad = tape.gradient(loss, image)
@@ -269,7 +294,7 @@ def neural_style_transfer(args):
 	for n in range(args.epochs):
 		print("Epoch: {}".format(n))
 		for m in range(args.steps):
-			loss, loss_style, loss_content = train_step(stylized_image, masks, style_features, content_features, args.weights)
+			loss, loss_style, loss_content = train_step(stylized_image, content_masks, style_masks, style_features, content_features, args.weights)
 		print("\tLOSS:\tstyle = {:.2f} \tcontent = {:.2f} \tTOT = {:.2f}".format(loss_style, loss_content, loss))
 		if not args.task == 'hq2clinical':
 			scores(stylized_image, style_target)
@@ -284,7 +309,7 @@ def neural_style_transfer(args):
 	end = time.time()
 	print("Total time: {:.1f}\n".format(end - start))
 
-	best_image = tf.multiply(best_image, mask_dict['fg'])
+	best_image = tf.multiply(best_image, mask_dict_content['fg'])
 	if not args.task == 'hq2clinical':
 		print("FINAL SCORES (epoch {}):".format(best_epoch))
 		scores(best_image, style_target)
